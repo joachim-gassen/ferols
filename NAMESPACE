@@ -1,0 +1,6 @@
+export(ferols)
+S3method(vcov, ferols)
+S3method(summary, ferols)
+S3method(print, ferols)
+import(fixest)
+importFrom(stats, as.formula, coef, residuals, vcov, model.matrix, pt, qnorm, median, uniroot, pnorm, dnorm)
