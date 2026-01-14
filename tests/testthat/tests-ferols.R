@@ -9,24 +9,6 @@ test_df <- get_test_df()
 assign("test_df", test_df, envir = .GlobalEnv)
 on.exit(rm("test_df", envir = .GlobalEnv), add = TRUE)
 
-set.seed(1)
-n_firm <- 50
-n_period <- 20
-firm <- rep(seq_len(n_firm), each = n_period)
-period <- rep(seq_len(n_period), times = n_firm)
-
-x <- rnorm(n_firm * n_period)
-x2 <- rnorm(n_firm * n_period)
-fe_firm <- rnorm(n_firm)[firm]
-fe_period <- rnorm(n_period)[period]
-y <- 1 * x + 0 * x2 + fe_firm + fe_period + rnorm(n_firm * n_period, sd = 0.5)
-
-sim_df <- data.frame(
-  y = y, x = x, x2 = x2, firm = firm, period = period, group = firm
-)
-assign("sim_df", sim_df, envir = .GlobalEnv)
-on.exit(rm("sim_df", envir = .GlobalEnv), add = TRUE)
-
 
 test_that("ferols runs and returns a ferols/fixest object", {
   fit <- ferols(y_cont ~ x, data = test_df, vcov = "iid")
@@ -63,13 +45,6 @@ test_that("vcov specifications ~i and cluster = 'i' are accepted", {
   expect_true(grepl("Clustered", attr(se1, "type")))
 })
 
-
-test_that("efficiency 0.7 runs", {
-  fit <- ferols(y_cont ~ x | i + t, data = test_df, vcov = ~ i, efficiency = 0.7)
-  expect_s3_class(fit, "ferols")
-})
-
-
 test_that("unsupported features error cleanly", {
   expect_error(ferols(y_cont ~ 1 | i + t | p ~ x, data = test_df))
   expect_error(ferols(y_cont ~ x | i + t, data = test_df, vcov = ~ i + t))
@@ -80,6 +55,16 @@ test_that("unsupported features error cleanly", {
   expect_error(ferols(y_cont ~ x | i + t, data = test_df, cluster = c("i", "t")))
 })
 
+test_that("efficiency 0.7 runs", {
+  fit <- ferols(y_cont ~ x | i + t, data = test_df, vcov = ~ i, efficiency = 0.7)
+  expect_s3_class(fit, "ferols")
+})
+
+test_that("simple twfe simulation returns sensible estimate", {
+  fit <- ferols(y_cont ~ x | i + t, vcov = ~ i, data = test_df)
+  
+  expect_true(abs(coef(fit)["x"] - 1) < 0.01)
+})
 
 test_that("efficiency=1 gives coefficients close to feols", {
   fit_fe <- fixest::feols(y_cont ~ x | i + t, data = test_df, vcov = "iid")
@@ -88,11 +73,26 @@ test_that("efficiency=1 gives coefficients close to feols", {
   expect_equal(unname(coef(fit_fr)), unname(coef(fit_fe)), tolerance = 1e-8)
 })
 
-
-test_that("simple twfe simulation returns sensible estimate", {
-  fit <- ferols(y ~ x + x2 | firm + period, vcov = ~ group, data = sim_df)
+test_that("print.ferols always prints the model info line (eff/k/scale/iter)", {
+  cap <- function(expr) paste(capture.output(expr), collapse = "\n")
   
-  expect_true(abs(coef(fit)["x"] - 1) < 0.1)
+  out1 <- cap(ferols(y_cont ~ x | i + t, vcov = ~ i, data = test_df))
+  fit <- ferols(y_cont ~ x | i + t, vcov = ~ i, data = test_df)
+  out2 <- cap(fit)
+  out3 <- cap(summary(fit))
+  
+  for (o in c(out1, out2, out3)) {
+    expect_true(grepl(
+      "ferols() - Fixed-effects robust IRWLS M regression (Huber loss)", 
+      o, fixed=TRUE
+    ))
+    expect_true(grepl("efficiency:", o, fixed = TRUE))
+    expect_true(grepl("\\bk:\\s*[-+]?[0-9]*\\.?[0-9]+", o, perl = TRUE))
+    expect_true(grepl(
+      "\\bscale:\\s*[-+]?[0-9]*\\.?[0-9]+([eE][-+]?[0-9]+)?", o, perl = TRUE
+    ))
+    expect_true(grepl("\\biter:\\s*[0-9]+", o, perl = TRUE))
+  }
 })
 
 test_that("data.save = TRUE allows vcov after data removal", {

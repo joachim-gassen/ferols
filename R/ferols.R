@@ -414,7 +414,7 @@ summary.ferols <- function(object, vcov = NULL, cluster = NULL, se = NULL, ssc =
   # Set SE attributes
   attr(s$se, "type") <- attr(V, "type")
   attr(s$coeftable, "type") <- attr(V, "type")
-  
+  class(s) <- c("ferols", class(s))
   s
 }
 
@@ -437,7 +437,10 @@ print.ferols <- function(x, ...) {
     cat(sprintf("  efficiency: %.1f%% | k: %.4f | scale: %.4g | iter: %d\n",
                 100 * x$robust$efficiency, x$robust$k, x$robust$scale, x$robust$iter))
   }
-  s <- summary(x)
+  obj <- x
+  x
+  class(obj) <- setdiff(class(obj), "ferols")
+  s <- summary(obj)
   print(s, ...)
   invisible(x)
 }
