@@ -4,6 +4,7 @@ get_test_df <- function() {
   if (path == "") stop("ferols_test_data.rds not found in package extdata")
   df <- readRDS(path)
 }
+cap <- function(expr) paste(capture.output(expr), collapse = "\n")
 
 test_df <- get_test_df()
 assign("test_df", test_df, envir = .GlobalEnv)
@@ -24,14 +25,15 @@ test_that("ferols runs and returns a ferols/fixest object", {
 })
 
 
-test_that("default vcov clusters on first fixed effect", {
+test_that("default vcov is IID", {
   fit <- ferols(y_cont ~ x | i + t, data = test_df)
   
   expect_true(is.matrix(fit$cov.scaled))
   type <- attr(fit$cov.scaled, "type")
   expect_true(is.character(type))
-  expect_true(grepl("Clustered", type))
-  expect_true(grepl("Clustered (i)", type, fixed = TRUE))
+  expect_true(grepl("IID", type))
+  expect_true(grepl("Standard-errors: IID", cap(fit), fixed = TRUE))
+  expect_true(grepl("Standard-errors: IID", cap(summary(fit)), fixed = TRUE))
 })
 
 
@@ -43,6 +45,8 @@ test_that("vcov specifications ~i and cluster = 'i' are accepted", {
   se2 <- summary(f2)$se
   expect_equal(unname(se1), unname(se2), tolerance = 1e-10)
   expect_true(grepl("Clustered", attr(se1, "type")))
+  expect_true(grepl("Standard-errors: Clustered (i)", cap(f1), fixed = TRUE))
+  expect_true(grepl("Standard-errors: Clustered (i)", cap(summary(f1)), fixed = TRUE))
 })
 
 test_that("unsupported features error cleanly", {
@@ -74,8 +78,6 @@ test_that("efficiency=1 gives coefficients close to feols", {
 })
 
 test_that("print.ferols always prints the model info line (eff/k/scale/iter)", {
-  cap <- function(expr) paste(capture.output(expr), collapse = "\n")
-  
   out1 <- cap(ferols(y_cont ~ x | i + t, vcov = ~ i, data = test_df))
   fit <- ferols(y_cont ~ x | i + t, vcov = ~ i, data = test_df)
   out2 <- cap(fit)

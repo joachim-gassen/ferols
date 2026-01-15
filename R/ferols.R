@@ -241,7 +241,7 @@ vcov.ferols <- function(
     stop("You set 'ssc' but small sample correction is not yet configurable")
   }
   
-  if(is.null(vcov) && length(object$fixef_vars) >= 1) {vcov <- "cluster"}
+  if(is.null(vcov)) {vcov <- "iid"}
   
   supported_char <- c("iid", "cluster")
   if (is.character(vcov)) {
@@ -294,8 +294,6 @@ vcov.ferols <- function(
       please_use_str
     ))
   }
-  
-  if(is.null(vcov)) {vcov = "iid"}
   
   # --- Custom clustered Huber sandwich vcov ---
   # If vcov is "iid", keep fixest's default vcov.
@@ -411,6 +409,9 @@ summary.ferols <- function(object, vcov = NULL, cluster = NULL, se = NULL, ssc =
   class(obj) <- setdiff(class(obj), "ferols")
   s <- summary(obj, vcov = V, ssc = ssc, ...)
   
+  # Restore our vcoc
+  s$cov.scaled <- V
+  
   # Set SE attributes
   attr(s$se, "type") <- attr(V, "type")
   attr(s$coeftable, "type") <- attr(V, "type")
@@ -437,10 +438,8 @@ print.ferols <- function(x, ...) {
     cat(sprintf("  efficiency: %.1f%% | k: %.4f | scale: %.4g | iter: %d\n",
                 100 * x$robust$efficiency, x$robust$k, x$robust$scale, x$robust$iter))
   }
-  obj <- x
-  x
-  class(obj) <- setdiff(class(obj), "ferols")
-  s <- summary(obj)
+  s <- summary.ferols(x)
+  class(s) <- setdiff(class(s), "ferols")
   print(s, ...)
   invisible(x)
 }
