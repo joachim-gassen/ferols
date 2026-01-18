@@ -1,16 +1,19 @@
 # ------------------------------------------------------------------------------
-# Work in process code for a fixed effect robust Huber-M estimator
+# A fixed effect robust Huber-M estimator
+#
+# Inspired the 'robtwfe' packge by David Veenman 
+# (https://github.com/dveenman/robtwfe)
 #
 # Heavily draws from the fixest package and calls feols() as a workhose
-# in the IRLS process. UI should mimic as close as possible-
-# Might be transferred into a minimal package at some point.
+# in the IRLS process. UI should mimic the one of fixest as close as possible-
 # 
 # See LICENSE file for license
 # ------------------------------------------------------------------------------
 
-# --- Helper Functions ---------------------------------------------------------
 
-# These should not be exported by the package
+# --- Helper functions ---------------------------------------------------------
+
+# These are not be exported by the package
 
 huber_k_from_eff <- function(eff_target) {
   eff_fun <- function(k) {
@@ -40,23 +43,96 @@ madn <- function(x) {
   ) / stats::qnorm(0.75)
 }
 
+mmfeqr.brs <- function(y, X, fe = NULL) {
+  y <- as.numeric(y)
+  X <- as.matrix(X)
+  n <- length(y)
+  if (nrow(X) != n) stop("y and X must have compatible rows.")
+  k <- ncol(X)
+  if (k == 0) stop("no indepdendent variables present in model")
+
+  # -------- Step 1: Absorb the FE with more levels and include the other ------
+  if (is.null(fe)) {
+    Xd = X
+    yd = y
+  } else {
+    if (length(fe) > 1) {
+      n_levels <- unlist(lapply(fe, function(x) nlevels(factor(x))))
+      idx_absorbed_fe <- which(n_levels == max(n_levels)[1])
+      dummy_fe <- fe[, -idx_absorbed_fe, drop = FALSE]
+      for(col in 1:ncol(dummy_fe)) {
+        X <- cbind(X, stats::model.matrix(~ factor(as.vector(dummy_fe[,col]))))
+      }
+      fe <- fe[, idx_absorbed_fe, drop = FALSE]
+    }
+    yd <- fixest::demean(y, fe)
+    Xd <- fixest::demean(X, fe) 
+  }
+  
+  # -------- Step 2: location LS on demeaned data (no intercept) ---------------
+  # LS: solve (X'X)b = X'y
+  b <- qr.coef(qr(Xd), yd)
+  b[!is.finite(b)] <- 0
+  e <- as.numeric(yd - Xd %*% b) # demeaned residual
+  
+  # -------- Step 3: scale proxy from "signed residual" regression -------------
+  # r_i = 2 * e_i * ( 1{e_i>=0} - mean_w(1{e_i>=0}) )
+  r_raw <- 2 * e * (as.numeric(e >= 0) - mean(e >= 0))
+  
+  # demean r_raw if FE are present
+  if (!is.null(fe)) {
+    rd <- fixest::demean(r_raw, fe)
+  } else {rd <- r_raw}
+  bs <- qr.coef(qr(Xd), rd)
+  bs[!is.finite(bs)] <- 0
+  
+  # ------- Step 4: Calculate bt and r for tau = 0.5 ---------------------------
+  shat <- as.numeric(X %*% bs)
+  u <- e / shat
+  q <- as.numeric(stats::quantile(u, probs = 0.5))
+  bt <- b + bs*q
+  r <- e - q * shat
+  
+  p <- (2*n - (n - k)) / (2*n)
+  s <- stats::quantile(abs(r), probs = p) / stats::qnorm(0.75)
+  list(r = r, b = bt[1:ncol(X)], s = s)
+}
+
 
 # --- Exported functions -------------------------------------------------------
 
-#' Fixed-effects robust IRWLS M regression (Huber loss)
+#' Fixed-effects robust IRLS M regression (Huber loss)
 #'
 #' @description
-#' Estimates linear models with high-dimensional fixed effects using IRWLS
-#' for Huber M-estimation. Fixed effects are absorbed using `fixest::demean`.
+#' Estimates linear models with high-dimensional fixed effects using 
+#' iteractively reweighted least squares (IRLS) for Huber M-estimation. 
+#' Fixed effects are absorbed using `fixest::demean`.
 #' Standard errors can be clustered via one dimension using a Huber (psi/phi) 
 #' sandwich estimator.
 #'
 #' @param fml A fixest formula of the form `y ~ x1 + x2 | fe1 + fe2`.
 #' @param data A data.frame.
 #' @param family Robust loss family. Currently only `"huber"`.
+#' @param scale_est Algorithm to estimate the residuals that are used to 
+#'  estimate the scale. Defaults to `"ols"`.
+#'    - `"ols"`: Uses `fixest:feols()` with absorbed fixed effects to derive 
+#'      the initial residuals.
+#'    - `"lad_rq"`: Uses `quantreg:rq.fit()` with absorbed fixed effects 
+#'      to estimate a median quantile regression (aka least absolute deviation
+#'      (LAD) regression) to derive the initial residuals.
+#'    - `"lad_mm"`: Uses an method of moments algorithm for the median quantile 
+#'      regression introduced by Machado and Santos Silva 
+#'      (2019, https://doi.org/10.1016/j.jeconom.2019.04.009) and extended by
+#'      Rios-Avila, Siles, and Canavire-Bacarreza 
+#'      (2024, https://docs.iza.org/dp17262.pdf). This should yield similar
+#'      scales as the approaches of the Stata packages `robreg` 
+#'      (https://github.com/benjann/robreg) and `robtwfe` 
+#'      (https://github.com/dveenman/robtwfe). This algorithm is currently
+#'      woirk-in-process.
+#' @param scale A positive numerical value to override the estimated scale.
 #' @param efficiency Target normal-efficiency in (0.68, 1). Default 0.95.
 #' @param tol Convergence tolerance on relative coefficient change.
-#' @param max_iter Maximum IRWLS iterations.
+#' @param max_iter Maximum IRLS iterations.
 #' @param vcov Variance-covariance specification. Either a string 
 #'  (`"iid"` or `"cluster"`) or a formula (`cluster ~ var`) to indicate the 
 #'  how it should be estimated. 
@@ -76,7 +152,8 @@ madn <- function(x) {
 #'  The code uses a default SSC of the type (G / (G - 1)) * ((n - 1) / (n - p)). 
 #'  This correction cannot be modified, so this parameter has to stay `NULL`
 #'  for the time being.
-#' @param ... Further arguments passed to `fixest::feols` (`weights =` is not used).
+#' @param ... Further arguments passed to `fixest::feols`. The `weights` 
+#'  argument cannot be used as it is set by the IRLS process.
 #'
 #' @return An object of class `"fixest"` with an additional list
 #'   `robust` containing `k`, `scale`, `efficiency`, `converged`, `iter`,
@@ -84,13 +161,19 @@ madn <- function(x) {
 #'
 #' @export
 ferols <- function(
-    fml, data, family = "huber", efficiency = 0.95, tol = 1e-10, max_iter = 200,
+    fml, data, family = "huber",  efficiency = 0.95, 
+    scale_est = "ols", scale = NULL, tol = 1e-10, max_iter = 200, 
     vcov = NULL, cluster = NULL, ssc = NULL, se = NULL, ...
 ) {
   if (!requireNamespace("fixest", quietly = TRUE)) {
-    stop("Package 'fixest' is required.")
+    stop("Package 'fixest' is required to run 'ferols()'.")
   }
   
+  # --- Argument checks --------------------------------------------------------
+  dots <- list(...)
+  if ("weights" %in% dots) {
+    stop("Argument 'weights' is not supported by 'ferols()'.")
+  }
   if (!is.character(family) || family != "huber") {
     stop("Only family = 'huber' is currently supported.")
   }
@@ -101,36 +184,83 @@ ferols <- function(
   if (length(fml_split) > 2) stop(
     "Three part formulae (including IVs) are not supported by ferols()."
   )
+  allowed_scale_ests <- c("ols", "lad_rq", "lad_mm")
+  if (! scale_est %in% allowed_scale_ests) {
+    stop(sprintf(
+      paste(
+        "Scale estimation alogorithm '%s' is not supported.", 
+        "Supported algorithms: '%s'"
+      ), scale_est, paste(allowed_scale_ests, collapse = "', '")
+    ))
+  } 
   
-  # --- initial fit (TWFE OLS) ---
-  fit <- fixest::feols(fml, data = data, ...)
-  r <- stats::residuals(fit)
-  if (length(r) == 0) stop("Model has no residuals; check formula/data.")
-  
-  # Initial scale + weights
-  scale <- madn(r)
-  if (!is.finite(scale) || scale <= 0) stop("Initial scale is not positive/finite.")
+  # --- Initial fit to estimate scale and starting beta ------------------------
+  if (scale_est == "ols")  {
+    fit <- fixest::feols(fml, data = data, ...)
+    r <- stats::residuals(fit)
+    if (is.null(scale)) scale <- madn(r)
+    beta_old <- stats::coef(fit)
+  } else {
+    mf_main <- stats::model.frame(fml_split[[1]], data)
+    y <- as.numeric(stats::model.response(mf_main))
+    X <- stats::model.matrix(fml_split[[1]], data = mf_main)
+    if (length(fml_split) == 2) { # FE present 
+      if ("(Intercept)" %in% colnames(X)) {
+        X <- X[, colnames(X) != "(Intercept)", drop = FALSE]
+      }
+      fe_vars <- all.vars(fml_split[[2]])
+      ridx <- as.integer(rownames(mf_main))
+      fe_df <- data[ridx, fe_vars, drop = FALSE]
+    } else {
+      fe_df <- NULL
+      fe_vars <- NULL
+    }
+    if (scale_est == "lad_rq") {
+      if (length(fml_split) == 2) { # FE present 
+        y_tilde <- fixest::demean(y, f = fe_df, na.rm = TRUE)
+        X_tilde <- fixest::demean(X, f = fe_df, na.rm = TRUE)
+      } else {
+        y_tilde <- y
+        X_tilde <- X
+      }
+      fit <- quantreg::rq.fit(x = X_tilde, y = y_tilde)
+      r <- stats::residuals(fit)
+      if (is.null(scale)) scale <- madn(r)
+      beta_old <- stats::coef(fit)
+    } else { # scale_est == "lad_mm"
+      brs <- mmfeqr.brs(y, X, fe_df)
+      r <- brs$r
+      if (is.null(scale)) scale <- brs$s
+      beta_old <- brs$b
+    }
+  } 
+
+  if (length(r) == 0) stop(
+    "Initial fit has no residuals; check formula/data."
+  )
+  if (anyNA(beta_old)) stop("Initial fit has NA coefficients (collinearity?).")
+  if (!is.finite(scale) || scale <= 0) stop(sprintf(
+    "Invalid scale %.3f. Scale needs to be strictly positive and finite.",
+    scale
+  ))
+
   k <- huber_k_from_eff(efficiency)
-  
-  z <- r / scale
+    z <- r / scale
   w <- huber_w(z, k)
   phi <- huber_phi(z, k)
   
-  # Convergence check on slope coefficients only
-  # (fixest coef includes only slopes; FE are not in coef vector)
-  beta_old <- stats::coef(fit)
-  if (anyNA(beta_old)) stop("Initial fit has NA coefficients (collinearity?).")
-  
+  # --- IRLS loop --------------------------------------------------------------
   converged <- FALSE
   iter_done <- 0L
   
-  # --- IRWLS loop ---
   for (it in seq_len(max_iter)) {
     iter_done <- it
     fit_new <- fixest::feols(fml, data = data, weights = w, ...)
     
     beta_new <- stats::coef(fit_new)
-    if (anyNA(beta_new)) stop("IRWLS produced NA coefficients; check collinearity/data issues.")
+    if (anyNA(beta_new)) stop(
+      "IRLS produced NA coefficients; check collinearity/data issues."
+    )
     
     # relative max change
     diff <- max(abs(beta_new - beta_old) / pmax(1, abs(beta_old)))
@@ -144,17 +274,19 @@ ferols <- function(
     beta_old <- beta_new
     
     r <- stats::residuals(fit)
-#    scale <- madn(r)
     z <- r / scale
     w <- huber_w(z, k)
     phi <- huber_phi(z, k)
   }
   
-  if (!converged) stop("ferols(): convergence not achieved (increase max_iter or relax tol).")
+  if (!converged) stop(
+    "IRLS convergence not achieved (increase max_iter or relax tol)."
+  )
 
-  # --- store robust meta ---
+  #--- Create fit object and call vcov.ferols() --------------------------------
   fit$robust <- list(
     family = family,
+    scale_est = scale_est,
     efficiency = efficiency,
     k = k,
     scale = scale,
@@ -164,8 +296,8 @@ ferols <- function(
     phi = phi
   )
   
-  fit$call <- match.call()              # overwrite feols call
-  fit$method <- "ferols"                # optional (fixest uses method strings in places)
+  fit$call <- match.call()             
+  fit$method <- "ferols"               
   class(fit) <- unique(c("ferols", class(fit)))
   
   V0 <- vcov.ferols(fit, vcov = "iid", cluster = NULL, se = NULL, ssc = NULL)
@@ -183,15 +315,19 @@ ferols <- function(
   # df for t-stats: use fixest df if available; otherwise fall back
   df_r <- tryCatch(fit$fixest$df.residual, error = function(e) NULL)
   if (is.null(df_r)) df_r <- fit$df.residual
-  if (is.null(df_r) || !is.finite(df_r)) df_r <- length(fit$residuals) - length(coef(fit))
+  if (is.null(df_r) || !is.finite(df_r)) {
+    df_r <- length(fit$residuals) - length(coef(fit))
+  }
   
   tval <- coef(fit) / se0
   pval <- 2 * stats::pt(abs(tval), df = df_r, lower.tail = FALSE)
   
-  ct <- cbind(Estimate = coef(fit),
-              `Std. Error` = se0,
-              `t value` = tval,
-              `Pr(>|t|)` = pval)
+  ct <- cbind(
+    Estimate = coef(fit),
+    `Std. Error` = se0,
+    `t value` = tval,
+    `Pr(>|t|)` = pval
+  )
   
   attr(ct, "type") <- attr(se0, "type")
   
@@ -202,11 +338,10 @@ ferols <- function(
 }
 
 
-
 #' Variance–covariance matrix for \code{ferols} objects
 #'
 #' @description
-#' Computes variance–covariance matrices for models estimated with
+#' Computes variance–covariance matrices for estimates generarted by
 #' \code{\link{ferols}}. The interface mirrors \code{fixest::vcov.fixest},
 #' but currently supports only Huber M-estimation sandwich estimators
 #' with either no clustering or one-way clustering.
@@ -218,7 +353,8 @@ ferols <- function(
 #'   if present.
 #' @param cluster Deprecated. Use \code{vcov} instead.
 #' @param se Deprecated. Use \code{vcov} instead.
-#' @param ssc Small-sample correction. Not configurable yet and must be \code{NULL}.
+#' @param ssc Small-sample correction. Not configurable yet and 
+#'  must be \code{NULL}.
 #' @param ... Additional arguments (currently ignored).
 #'
 #' @return A variance–covariance matrix with coefficient names as row and
@@ -237,6 +373,7 @@ vcov.ferols <- function(
 ) {
   vcov <- fixest:::oldargs_to_vcov(se, cluster, vcov) 
   
+  # --- Argument checks --------------------------------------------------------
   if (!is.null(ssc)) {
     stop("You set 'ssc' but small sample correction is not yet configurable")
   }
@@ -295,23 +432,12 @@ vcov.ferols <- function(
     ))
   }
   
-  # --- Custom clustered Huber sandwich vcov ---
-  # If vcov is "iid", keep fixest's default vcov.
-  # If vcov is a one-way formula cluster ~ var, compute our psi/phi clustered vcov.
-  
+  # --- Construct variace/covariance matrix ------------------------------------
   if (is.character(vcov) && identical(vcov, "iid")) {
     obj <- object
     class(obj) <- setdiff(class(obj), "ferols")
     V <- stats::vcov(obj, vcov = "iid", ...)
   } else {
-    # The below should never trigger (checked before)
-    if (!inherits(vcov, "formula")) stop(
-      "vcov must be 'iid' or a one-way formula like cluster ~ id."
-    )
-    if (length(cl_var) != 1) stop(
-      "Only one-way clustering is supported: vcov = ~ id"
-    )
-    
     # estimation sample data
     mf <- fixest::fixest_data(object, sample = "est")
     
@@ -374,6 +500,7 @@ vcov.ferols <- function(
   V
 }
 
+
 #' Summarize a \code{ferols} model
 #'
 #' @description
@@ -387,7 +514,8 @@ vcov.ferols <- function(
 #'   the covariance matrix stored in the object is used.
 #' @param cluster Deprecated. Use \code{vcov} instead.
 #' @param se Deprecated. Use \code{vcov} instead.
-#' @param ssc Small-sample correction. Not configurable yet and must be \code{NULL}.
+#' @param ssc Small-sample correction. Not configurable yet and 
+#'  must be \code{NULL}.
 #' @param ... Additional arguments passed to \code{fixest::summary.fixest}.
 #'
 #' @return An object of class \code{"summary.fixest"} containing coefficient
@@ -396,9 +524,13 @@ vcov.ferols <- function(
 #'   the variance estimator used.
 #'
 #' @export
-summary.ferols <- function(object, vcov = NULL, cluster = NULL, se = NULL, ssc = NULL, ...) {
+summary.ferols <- function(
+  object, vcov = NULL, cluster = NULL, se = NULL, ssc = NULL, ...
+) {
   # If user supplies vcov/cluster here, use it; otherwise use our vcov(object)
-  V <- if (!is.null(vcov) || !is.null(cluster) || !is.null(se) || !is.null(ssc)) {
+  V <- if (
+    !is.null(vcov) || !is.null(cluster) || !is.null(se) || !is.null(ssc)
+  ) {
     vcov(object, vcov = vcov, cluster = cluster, se = se, ssc = ssc, ...)
   } else {
     V <- object$cov.scaled
@@ -419,6 +551,7 @@ summary.ferols <- function(object, vcov = NULL, cluster = NULL, se = NULL, ssc =
   s
 }
 
+
 #' Print method for \code{ferols} objects
 #'
 #' @description
@@ -433,10 +566,16 @@ summary.ferols <- function(object, vcov = NULL, cluster = NULL, se = NULL, ssc =
 #'
 #' @export
 print.ferols <- function(x, ...) {
-  cat("ferols() - Fixed-effects robust IRWLS M regression (Huber loss)\n")
+  cat("ferols() - Fixed-effects robust IRLS M regression (Huber loss)\n")
   if (!is.null(x$robust)) {
-    cat(sprintf("  efficiency: %.1f%% | k: %.4f | scale: %.4g | iter: %d\n",
-                100 * x$robust$efficiency, x$robust$k, x$robust$scale, x$robust$iter))
+    cat(sprintf(
+      paste(
+        "  efficiency: %.1f%% | k: %.4f | scale est: %s",
+        "| scale: %.4g | iter: %d\n"
+      ),
+      100 * x$robust$efficiency, x$robust$k, x$robust$scale_est,
+      x$robust$scale, x$robust$iter
+    ))
   }
   s <- summary.ferols(x)
   class(s) <- setdiff(class(s), "ferols")

@@ -16,7 +16,8 @@ the covariance matrix stored in the object is used.}
 
 \item{se}{Deprecated. Use \code{vcov} instead.}
 
-\item{ssc}{Small-sample correction. Not configurable yet and must be \code{NULL}.}
+\item{ssc}{Small-sample correction. Not configurable yet and
+must be \code{NULL}.}
 
 \item{...}{Additional arguments passed to \code{fixest::summary.fixest}.}
 }

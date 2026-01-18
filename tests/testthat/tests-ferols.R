@@ -25,7 +25,7 @@ test_that("ferols runs and returns a ferols/fixest object", {
 })
 
 
-test_that("default vcov is IID", {
+test_that("default vcov is IID and default scale_est is 'ols'", {
   fit <- ferols(y_cont ~ x | i + t, data = test_df)
   
   expect_true(is.matrix(fit$cov.scaled))
@@ -34,6 +34,8 @@ test_that("default vcov is IID", {
   expect_true(grepl("IID", type))
   expect_true(grepl("Standard-errors: IID", cap(fit), fixed = TRUE))
   expect_true(grepl("Standard-errors: IID", cap(summary(fit)), fixed = TRUE))
+  out <- cap(fit)
+  expect_true(grepl("scale est: ols", out, fixed = TRUE))
 })
 
 
@@ -51,6 +53,8 @@ test_that("vcov specifications ~i and cluster = 'i' are accepted", {
 
 test_that("unsupported features error cleanly", {
   expect_error(ferols(y_cont ~ 1 | i + t | p ~ x, data = test_df))
+  expect_error(ferols(y_cont ~ 1 | i + t, data = test_df, weights = runif(nrow(test_df))))
+  expect_error(ferols(y_cont ~ x | i + t, data = test_df, scale_est = "unknown"))
   expect_error(ferols(y_cont ~ x | i + t, data = test_df, vcov = ~ i + t))
   expect_error(ferols(y_cont ~ x | i + t, data = test_df, vcov = "hetero"))
   expect_error(ferols(y_cont ~ x | i + t, data = test_df, vcov = matrix(1, 1, 1)))
@@ -64,9 +68,29 @@ test_that("efficiency 0.7 runs", {
   expect_s3_class(fit, "ferols")
 })
 
+test_that("scale_est='ols' yields an estimate", {
+  fit <- ferols(y_cont ~ x, data = test_df, scale_est = "ols")
+  expect_s3_class(fit, "ferols")
+  fit <- ferols(y_cont ~ x | i + t, data = test_df, scale_est = "ols")
+  expect_s3_class(fit, "ferols")
+})
+
+test_that("scale_est='lad_rq' yields an estimate", {
+  fit <- ferols(y_cont ~ x, data = test_df, scale_est = "lad_rq")
+  expect_s3_class(fit, "ferols")
+  fit <- ferols(y_cont ~ x | i + t, data = test_df, scale_est = "lad_rq")
+  expect_s3_class(fit, "ferols")
+})
+
+test_that("scale_est='lad_mm' yields an estimate", {
+  fit <- ferols(y_cont ~ x, data = test_df, scale_est = "lad_mm")
+  expect_s3_class(fit, "ferols")
+  fit <- ferols(y_cont ~ x | i + t, data = test_df, scale_est = "lad_mm")
+  expect_s3_class(fit, "ferols")
+})
+
 test_that("simple twfe simulation returns sensible estimate", {
   fit <- ferols(y_cont ~ x | i + t, vcov = ~ i, data = test_df)
-  
   expect_true(abs(coef(fit)["x"] - 1) < 0.01)
 })
 
@@ -85,11 +109,12 @@ test_that("print.ferols always prints the model info line (eff/k/scale/iter)", {
   
   for (o in c(out1, out2, out3)) {
     expect_true(grepl(
-      "ferols() - Fixed-effects robust IRWLS M regression (Huber loss)", 
+      "ferols() - Fixed-effects robust IRLS M regression (Huber loss)", 
       o, fixed=TRUE
     ))
     expect_true(grepl("efficiency:", o, fixed = TRUE))
     expect_true(grepl("\\bk:\\s*[-+]?[0-9]*\\.?[0-9]+", o, perl = TRUE))
+    expect_true(grepl("scale est: (ols|lad)", o))
     expect_true(grepl(
       "\\bscale:\\s*[-+]?[0-9]*\\.?[0-9]+([eE][-+]?[0-9]+)?", o, perl = TRUE
     ))
@@ -115,5 +140,12 @@ test_that("data.save = TRUE allows vcov after data removal", {
   V <- vcov(fit)
   expect_true(is.matrix(V))
   expect_true(all(dim(V) > 0))
+})
+
+test_that("scale parameiter is obeyed.", {
+  out <- cap(
+    ferols(y_cont ~ x | i + t, vcov = ~ i, scale = 0.987, data = test_df)
+  )
+  expect_true(grepl("scale: 0.987", out, fixed = TRUE))
 })
 

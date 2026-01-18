@@ -18,7 +18,8 @@ if present.}
 
 \item{se}{Deprecated. Use \code{vcov} instead.}
 
-\item{ssc}{Small-sample correction. Not configurable yet and must be \code{NULL}.}
+\item{ssc}{Small-sample correction. Not configurable yet and
+must be \code{NULL}.}
 
 \item{...}{Additional arguments (currently ignored).}
 }
@@ -28,7 +29,7 @@ column names. The matrix carries a \code{"type"} attribute describing
 the estimator.
 }
 \description{
-Computes variance–covariance matrices for models estimated with
+Computes variance–covariance matrices for estimates generarted by
 \code{\link{ferols}}. The interface mirrors \code{fixest::vcov.fixest},
 but currently supports only Huber M-estimation sandwich estimators
 with either no clustering or one-way clustering.

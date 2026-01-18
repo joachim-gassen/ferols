@@ -2,13 +2,15 @@
 % Please edit documentation in R/ferols.R
 \name{ferols}
 \alias{ferols}
-\title{Fixed-effects robust IRWLS M regression (Huber loss)}
+\title{Fixed-effects robust IRLS M regression (Huber loss)}
 \usage{
 ferols(
   fml,
   data,
   family = "huber",
   efficiency = 0.95,
+  scale_est = "ols",
+  scale = NULL,
   tol = 1e-10,
   max_iter = 200,
   vcov = NULL,
@@ -27,9 +29,30 @@ ferols(
 
 \item{efficiency}{Target normal-efficiency in (0.68, 1). Default 0.95.}
 
+\item{scale_est}{Algorithm to estimate the residuals that are used to
+estimate the scale. Defaults to \code{"ols"}.
+\itemize{
+\item \code{"ols"}: Uses \code{fixest:feols()} with absorbed fixed effects to derive
+the initial residuals.
+\item \code{"lad_rq"}: Uses \code{quantreg:rq.fit()} with absorbed fixed effects
+to estimate a median quantile regression (aka least absolute deviation
+(LAD) regression) to derive the initial residuals.
+\item \code{"lad_mm"}: Uses an method of moments algorithm for the median quantile
+regression introduced by Machado and Santos Silva
+(2019, https://doi.org/10.1016/j.jeconom.2019.04.009) and extended by
+Rios-Avila, Siles, and Canavire-Bacarreza
+(2024, https://docs.iza.org/dp17262.pdf). This should yield similar
+scales as the approaches of the Stata packages \code{robreg}
+(https://github.com/benjann/robreg) and \code{robtwfe}
+(https://github.com/dveenman/robtwfe). This algorithm is currently
+woirk-in-process.
+}}
+
+\item{scale}{A positive numerical value to override the estimated scale.}
+
 \item{tol}{Convergence tolerance on relative coefficient change.}
 
-\item{max_iter}{Maximum IRWLS iterations.}
+\item{max_iter}{Maximum IRLS iterations.}
 
 \item{vcov}{Variance-covariance specification. Either a string
 (\code{"iid"} or \code{"cluster"}) or a formula (\code{cluster ~ var}) to indicate the
@@ -56,7 +79,8 @@ for the time being.}
 the standard errors should be calculated. Note that this argument is
 deprecated, you should use \code{vcov} instead.}
 
-\item{...}{Further arguments passed to \code{fixest::feols} (\verb{weights =} is not used).}
+\item{...}{Further arguments passed to \code{fixest::feols}. The \code{weights}
+argument cannot be used as it is set by the IRLS process.}
 }
 \value{
 An object of class \code{"fixest"} with an additional list
@@ -64,8 +88,9 @@ An object of class \code{"fixest"} with an additional list
 \code{weights}, and \code{phi}.
 }
 \description{
-Estimates linear models with high-dimensional fixed effects using IRWLS
-for Huber M-estimation. Fixed effects are absorbed using \code{fixest::demean}.
+Estimates linear models with high-dimensional fixed effects using
+iteractively reweighted least squares (IRLS) for Huber M-estimation.
+Fixed effects are absorbed using \code{fixest::demean}.
 Standard errors can be clustered via one dimension using a Huber (psi/phi)
 sandwich estimator.
 }
