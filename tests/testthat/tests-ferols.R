@@ -26,8 +26,7 @@ test_that("ferols runs and returns a ferols/fixest object", {
 
 
 test_that("default vcov is IID and default scale_est is 'lad_mm_rsc'", {
-  fit <- ferols(y_cont ~ x | i + t, data = test_df)
-  
+  expect_no_warning(fit <- ferols(y_cont ~ x | i + t, data = test_df))
   expect_true(is.matrix(fit$cov.scaled))
   type <- attr(fit$cov.scaled, "type")
   expect_true(is.character(type))
@@ -40,11 +39,15 @@ test_that("default vcov is IID and default scale_est is 'lad_mm_rsc'", {
 
 
 test_that("vcov specifications ~i and cluster = 'i' are accepted", {
-  f1 <- ferols(y_cont ~ x | i + t, data = test_df, vcov = ~ i)
-  f2 <- ferols(y_cont ~ x | i + t, data = test_df, cluster = "i")
+  expect_no_warning(
+    f1 <- ferols(y_cont ~ x | i + t, data = test_df, vcov = ~ i)
+  )
+  expect_no_warning(
+    f2 <- ferols(y_cont ~ x | i + t, data = test_df, cluster = "i")
+  )
   
-  se1 <- summary(f1)$se
-  se2 <- summary(f2)$se
+  expect_no_warning(se1 <- summary(f1)$se)
+  expect_no_warning(se2 <- summary(f2)$se)
   expect_equal(unname(se1), unname(se2), tolerance = 1e-10)
   expect_true(grepl("Clustered", attr(se1, "type")))
   expect_true(grepl("Standard-errors: Clustered (i)", cap(f1), fixed = TRUE))
@@ -69,23 +72,35 @@ test_that("efficiency 0.7 runs", {
 })
 
 test_that("scale_est='ols' yields an estimate", {
-  fit <- ferols(y_cont ~ x, data = test_df, scale_est = "ols")
+  expect_no_warning(
+    fit <- ferols(y_cont ~ x, data = test_df, scale_est = "ols")
+  )
   expect_s3_class(fit, "ferols")
-  fit <- ferols(y_cont ~ x | i + t, data = test_df, scale_est = "ols")
+  expect_no_warning(
+    fit <- ferols(y_cont ~ x | i + t, data = test_df, scale_est = "ols")
+  )
   expect_s3_class(fit, "ferols")
 })
 
 test_that("scale_est='lad_mm_ms' yields an estimate", {
-  fit <- ferols(y_cont ~ x, data = test_df, scale_est = "lad_mm_ms")
+  expect_no_warning(
+    fit <- ferols(y_cont ~ x, data = test_df, scale_est = "lad_mm_ms")
+  )
   expect_s3_class(fit, "ferols")
-  fit <- ferols(y_cont ~ x | i + t, data = test_df, scale_est = "lad_mm_ms")
+  expect_no_warning(
+    fit <- ferols(y_cont ~ x | i + t, data = test_df, scale_est = "lad_mm_ms")
+  )
   expect_s3_class(fit, "ferols")
 })
 
 test_that("scale_est='lad_mm_rsc' yields an estimate", {
-  fit <- ferols(y_cont ~ x, data = test_df, scale_est = "lad_mm_rsc")
+  expect_no_warning(
+    fit <- ferols(y_cont ~ x, data = test_df, scale_est = "lad_mm_rsc")
+  )
   expect_s3_class(fit, "ferols")
-  fit <- ferols(y_cont ~ x | i + t, data = test_df, scale_est = "lad_mm_rsc")
+  expect_no_warning(
+    fit <- ferols(y_cont ~ x | i + t, data = test_df, scale_est = "lad_mm_rsc")
+  )
   expect_s3_class(fit, "ferols")
 })
 

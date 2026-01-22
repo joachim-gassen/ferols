@@ -99,7 +99,7 @@ lad_mm_ms <- function(fml, data, tau = 0.5) {
   data$r_raw <-  2 * e * (Ipos - Ibar)
 
   # --- Estimate scale ---------------------------------------------------------
-  fml_scl <- fml
+  fml_scl <- fml_loc
   fml_scl[[2]] <- substitute(r_raw)
   fit_scl <- fixest::feols(fml_scl, data, warn = FALSE, notes = FALSE)
   denom <- as.numeric(stats::fitted(fit_scl))
@@ -124,7 +124,7 @@ lad_mm_ms <- function(fml, data, tau = 0.5) {
   bT <- bL + bS * qhat
   
   list(
-    b = as.numeric(bT),
+    b = as.numeric(bT[names(bL) %in% all.vars(fml_split[[1]])]),
     r = resid_tau,
     s = s
   )
