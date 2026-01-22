@@ -29,15 +29,16 @@ error distributions. While `fixest` provides fast and reliable estimation
 for large linear models with fixed effects, it does not currently offer
 robust estimators.
 
-The `ferols` package is a first step to fill this gap. It is inteded to be 
-useful for setting with high-dimensional fixedeffects (e.g. panel data with 
-unit and time effects) and offers robustinference via Huber ψ/φ sandwich 
+The `ferols` package is a first step to fill this gap. It is intended to be 
+useful for settings with high-dimensional fixed effects (e.g. panel data with 
+unit and time effects) and offers robust inference via Huber ψ/φ sandwich 
 variance estimators, including clustered standard errors.
 
 
 ## Disclaimer 
 
-`ferols` is not meant to replace established R packages for robust regression
+`ferols` is not meant to replace 
+[established R packages for robust regression](https://cran.r-project.org/web/views/Robust.html)
 as these provide much more flexible, tested, and rigorous implementations. 
 Rather it aims to fill a narrow gap as these packages currently do not allow
 to absorb fixed effects during estimation and might thus run in 

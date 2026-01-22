@@ -43,59 +43,191 @@ madn <- function(x) {
   ) / stats::qnorm(0.75)
 }
 
-mmfeqr.brs <- function(y, X, fe = NULL) {
-  y <- as.numeric(y)
+# Returns the group means at observation level
+gmean_expand <- function(v, g) {
+  g <- as.integer(g)
+  rs <- rowsum(v, g, reorder = FALSE, na.rm = TRUE)
+  n  <- as.numeric(tabulate(g, nbins = nrow(rs)))
+  gm <- rs / n
+  gm[g, , drop = FALSE]
+}
+
+# build FE dummies without intercept
+# drop first level per FE to avoid collinearity
+fe_dummies <- function(f) {
+  f <- factor(f)
+  mm <- stats::model.matrix(~ f - 1)
+  if (ncol(mm) > 0) mm <- mm[, -1, drop = FALSE]
+  mm
+}
+
+# ------------------------------------------------------------------------------
+# Method of moments quantile estimator as introduced by
+# Machado and Santos Silva (2019) 
+# https://doi.org/10.1016/j.jeconom.2019.04.009
+# Mirrors the approach of Ben Jann in his Stata moremeta code
+# https://github.com/benjann/moremata/blob/master/source/mm_aqreg.mata
+# ------------------------------------------------------------------------------
+
+lad_mm_ms <- function(fml, data, tau = 0.5) {
+  fml_split <- fixest:::fml_split(fml, raw = TRUE)
+  mf_main <- stats::model.frame(fml_split[[1]], data)
+  y <- as.numeric(stats::model.response(mf_main))
+  X <- stats::model.matrix(fml_split[[1]], data = mf_main)
+  if (length(fml_split) == 2) { # FE present 
+    if ("(Intercept)" %in% colnames(X)) {
+      X <- X[, colnames(X) != "(Intercept)", drop = FALSE]
+    }
+    fe_vars <- all.vars(fml_split[[2]])
+    ridx <- as.integer(rownames(mf_main))
+    fe <- data[ridx, fe_vars, drop = FALSE]
+  } else {
+    fe <- NULL
+    fe_vars <- NULL
+  }
+  
   X <- as.matrix(X)
   n <- length(y)
   if (nrow(X) != n) stop("y and X must have compatible rows.")
-  k <- ncol(X)
-  if (k == 0) stop("no indepdendent variables present in model")
-
-  # -------- Step 1: Absorb the FE with more levels and include the other ------
-  if (is.null(fe)) {
-    Xd = X
-    yd = y
-  } else {
-    if (length(fe) > 1) {
-      n_levels <- unlist(lapply(fe, function(x) nlevels(factor(x))))
-      idx_absorbed_fe <- which(n_levels == max(n_levels)[1])
-      dummy_fe <- fe[, -idx_absorbed_fe, drop = FALSE]
-      for(col in 1:ncol(dummy_fe)) {
-        X <- cbind(X, stats::model.matrix(~ factor(as.vector(dummy_fe[,col]))))
-      }
-      fe <- fe[, idx_absorbed_fe, drop = FALSE]
-    }
-    yd <- fixest::demean(y, fe)
-    Xd <- fixest::demean(X, fe) 
-  }
+  k0 <- ncol(X)
+  if (k0 == 0) stop("no independent variables present in model")
   
-  # -------- Step 2: location LS on demeaned data (no intercept) ---------------
-  # LS: solve (X'X)b = X'y
-  b <- qr.coef(qr(Xd), yd)
-  b[!is.finite(b)] <- 0
-  e <- as.numeric(yd - Xd %*% b) # demeaned residual
+  # --- Build design matrix, absorbing the fixed effect with most levels -------
+  Xfull <- X
+  idx_abs <- NA_integer_
+  id <- rep(1L, n) # dummy single group if no FE
   
-  # -------- Step 3: scale proxy from "signed residual" regression -------------
-  # r_i = 2 * e_i * ( 1{e_i>=0} - mean_w(1{e_i>=0}) )
-  r_raw <- 2 * e * (as.numeric(e >= 0) - mean(e >= 0))
-  
-  # demean r_raw if FE are present
   if (!is.null(fe)) {
-    rd <- fixest::demean(r_raw, fe)
-  } else {rd <- r_raw}
-  bs <- qr.coef(qr(Xd), rd)
-  bs[!is.finite(bs)] <- 0
+    fe <- as.data.frame(fe)
+    if (nrow(fe) != n) stop("fe must have same number of rows as y/X.")
+    
+    n_levels <- vapply(fe, function(v) nlevels(factor(v)), integer(1))
+    idx_abs <- which.max(n_levels)
+    id <- as.integer(factor(fe[[idx_abs]]))
+    
+    if (ncol(fe) > 1) {
+      fe_small <- fe[, -idx_abs, drop = FALSE]
+      dm_list <- lapply(
+        seq_len(ncol(fe_small)), function(j) fe_dummies(fe_small[[j]])
+      )
+      dm <- if (length(dm_list)) do.call(cbind, dm_list) else NULL
+      if (!is.null(dm) && ncol(dm) > 0) {
+        colnames(dm) <- make.unique(colnames(dm))
+        Xfull <- cbind(Xfull, dm)
+      }
+    }
+  } 
   
-  # ------- Step 4: Calculate bt and r for tau = 0.5 ---------------------------
-  shat <- as.numeric(X %*% bs)
-  u <- e / shat
-  q <- as.numeric(stats::quantile(u, probs = 0.5))
-  bt <- b + bs*q
-  r <- e - q * shat
+  # --- Calculate group means and overall means for y and X --------------------
+  ym <- as.numeric(gmean_expand(matrix(y, n, 1), id))
+  Xm <- gmean_expand(Xfull, id)
+  yd <- y - ym
+  Xd <- Xfull - Xm
   
-  p <- (2*n - (n - k)) / (2*n)
-  s <- stats::quantile(abs(r), probs = p) / stats::qnorm(0.75)
-  list(r = r, b = bt[1:ncol(X)], s = s)
+  # global
+  ybar <- mean(y)
+  Xbar <- colMeans(Xfull)
+  
+  # --- Estimate location ------------------------------------------------------
+  bL <- qr.coef(qr(Xd), yd)
+  bL[!is.finite(bL)] <- 0
+  beta0 <- ybar - drop(Xbar %*% bL)
+  # Stata always has an intercept....
+  alpha <- as.numeric(ym - drop(Xm %*% bL) - beta0) 
+  e <- as.numeric(yd - drop(Xd %*% bL))         
+  
+  # --- Estimate scale ---------------------------------------------------------
+  Ipos <- as.numeric(e >= 0)
+  Ibar <- mean(Ipos)  
+  r_raw <- 2 * e * (Ipos - Ibar)
+  
+  rm <- as.numeric(gmean_expand(matrix(r_raw, n, 1), id))
+  rd <- r_raw - rm
+  
+  bS <- qr.coef(qr(Xd), rd)
+  bS[!is.finite(bS)] <- 0
+  gamma0 <- mean(r_raw) - drop(Xbar %*% bS)
+  
+  delta_raw <- as.numeric(rm - drop(Xm %*% bS))
+  denom <- as.numeric(drop(Xfull %*% bS) + delta_raw)
+  
+  # Avoiding numerical issues causing scale estimates to become zero 
+  eps <- sqrt(.Machine$double.eps)
+  denom <- pmax(denom, eps)
+  
+  u <- e / denom
+  qhat <- as.numeric(stats::quantile(u, probs = tau, type = 7, names = FALSE))
+  delta <- delta_raw - gamma0
+  bT <- bL + bS * qhat
+  beta0T <- beta0 + gamma0 * qhat
+  yhat_tau <- as.numeric(beta0T + drop(Xfull %*% bT) + alpha + delta * qhat)
+  resid_tau <- y - yhat_tau
+  
+  # --- Calculate scale based on prob adjusted for resid dof -------------------
+  ni <- length(unique(id))
+  rank_Xd <- qr(Xd)$rank
+  df_initial <- n - ni - rank_Xd
+  pprob <- (2 * n - df_initial) / (2 * n)
+  s <- as.numeric(
+    stats::quantile(abs(resid_tau), probs = pprob, type = 7, names = FALSE)) /
+    stats::qnorm(0.75)
+  
+  list(
+    b = bT[seq_len(k0)],
+    r = resid_tau,
+    s = s
+  )
+}
+
+
+# ------------------------------------------------------------------------------
+# Following methods of moment approach as in 
+# Rios-Avila, Siles, and Canavire-Bacarreza  (2024)
+# https://docs.iza.org/dp17262.pdf)
+# to absorb multiple fixed effects. Generates scale, beta, and residual
+# estimates that are very 
+# ------------------------------------------------------------------------------
+
+lad_mm_rsc <- function(fml, data, tau = 0.5) {
+  # --- Estimate location ------------------------------------------------------
+  fit_loc <- fixest::feols(fml, data, warn = FALSE, notes = FALSE)
+  yhat_loc <- as.numeric(stats::fitted(fit_loc))
+  y <- as.numeric(data[, as.character(fml[[2]]), drop = TRUE])
+  e <- y - yhat_loc
+  Ipos <- as.numeric(e >= 0)
+  Ibar <- mean(Ipos)
+  data$r_raw <-  2 * e * (Ipos - Ibar)
+  
+  # --- Estimate scale ---------------------------------------------------------
+  fml_scl <- fml
+  fml_scl[[2]] <- substitute(r_raw)
+  fit_scl <- fixest::feols(fml_scl, data, warn = FALSE, notes = FALSE)
+  denom <- as.numeric(stats::fitted(fit_scl))
+  
+  # Avoiding numerical issues causing scale estimates to become zero 
+  eps <- sqrt(.Machine$double.eps)
+  denom <- pmax(denom, eps)
+
+  u <- e / denom
+  qhat <- as.numeric(stats::quantile(u, probs = tau, type = 7, names = FALSE))
+  resid_tau <- y - (yhat_loc + qhat * denom)
+  df_initial <- fixest::degrees_freedom(fit_loc, type = "resid") 
+  n <- fit_loc$nobs
+  pprob <- (2 * n - df_initial) / (2 * n)
+  
+  s <- as.numeric(
+    stats::quantile(abs(resid_tau), probs = pprob, type = 7, names = FALSE)) /
+    stats::qnorm(0.75)
+  
+  bL <- stats::coef(fit_loc)
+  bS <- stats::coef(fit_scl)
+  bT <- bL + bS * qhat
+  
+  list(
+    b = as.numeric(bT),
+    r = resid_tau,
+    s = s
+  )
 }
 
 
@@ -114,21 +246,22 @@ mmfeqr.brs <- function(y, X, fe = NULL) {
 #' @param data A data.frame.
 #' @param family Robust loss family. Currently only `"huber"`.
 #' @param scale_est Algorithm to estimate the residuals that are used to 
-#'  estimate the scale. Defaults to `"ols"`.
+#'  estimate the scale. Defaults to `"lad_mm_rsc"`.
 #'    - `"ols"`: Uses `fixest:feols()` with absorbed fixed effects to derive 
 #'      the initial residuals.
-#'    - `"lad_rq"`: Uses `quantreg:rq.fit()` with absorbed fixed effects 
-#'      to estimate a median quantile regression (aka least absolute deviation
-#'      (LAD) regression) to derive the initial residuals.
-#'    - `"lad_mm"`: Uses an method of moments algorithm for the median quantile 
+#'    - `"lad_mm_ms"`: Uses an method of moments algorithm for the median quantile 
 #'      regression introduced by Machado and Santos Silva 
-#'      (2019, https://doi.org/10.1016/j.jeconom.2019.04.009) and extended by
+#'      (2019, https://doi.org/10.1016/j.jeconom.2019.04.009). 
+#'      This should yield similar scale and beta estimates as the approaches of 
+#'      the Stata packages `robreg` (https://github.com/benjann/robreg) and 
+#'      `robtwfe` (https://github.com/dveenman/robtwfe). 
+#'      This algorithm is currently work-in-process.
+#'    - `"lad_mm_rsc"`: Method of moment algorithm as extended by
 #'      Rios-Avila, Siles, and Canavire-Bacarreza 
-#'      (2024, https://docs.iza.org/dp17262.pdf). This should yield similar
-#'      scales as the approaches of the Stata packages `robreg` 
-#'      (https://github.com/benjann/robreg) and `robtwfe` 
-#'      (https://github.com/dveenman/robtwfe). This algorithm is currently
-#'      woirk-in-process.
+#'      (2024, https://docs.iza.org/dp17262.pdf). This algorithm is
+#'      faster as it absorbs multi-dimensional fixed effects. Its scale and beta
+#'      estimates should be virtually identical (within numerical precision) to 
+#'      the ones generated by `"lad_mm_ms"`.
 #' @param scale A positive numerical value to override the estimated scale.
 #' @param efficiency Target normal-efficiency in (0.68, 1). Default 0.95.
 #' @param tol Convergence tolerance on relative coefficient change.
@@ -162,7 +295,7 @@ mmfeqr.brs <- function(y, X, fe = NULL) {
 #' @export
 ferols <- function(
     fml, data, family = "huber",  efficiency = 0.95, 
-    scale_est = "ols", scale = NULL, tol = 1e-10, max_iter = 200, 
+    scale_est = "lad_mm_rsc", scale = NULL, tol = 1e-10, max_iter = 200, 
     vcov = NULL, cluster = NULL, ssc = NULL, se = NULL, ...
 ) {
   if (!requireNamespace("fixest", quietly = TRUE)) {
@@ -184,7 +317,7 @@ ferols <- function(
   if (length(fml_split) > 2) stop(
     "Three part formulae (including IVs) are not supported by ferols()."
   )
-  allowed_scale_ests <- c("ols", "lad_rq", "lad_mm")
+  allowed_scale_ests <- c("ols", "lad_mm_ms", "lad_mm_rsc")
   if (! scale_est %in% allowed_scale_ests) {
     stop(sprintf(
       paste(
@@ -200,40 +333,22 @@ ferols <- function(
     r <- stats::residuals(fit)
     if (is.null(scale)) scale <- madn(r)
     beta_old <- stats::coef(fit)
-  } else {
-    mf_main <- stats::model.frame(fml_split[[1]], data)
-    y <- as.numeric(stats::model.response(mf_main))
-    X <- stats::model.matrix(fml_split[[1]], data = mf_main)
-    if (length(fml_split) == 2) { # FE present 
-      if ("(Intercept)" %in% colnames(X)) {
-        X <- X[, colnames(X) != "(Intercept)", drop = FALSE]
-      }
-      fe_vars <- all.vars(fml_split[[2]])
-      ridx <- as.integer(rownames(mf_main))
-      fe_df <- data[ridx, fe_vars, drop = FALSE]
-    } else {
-      fe_df <- NULL
-      fe_vars <- NULL
-    }
-    if (scale_est == "lad_rq") {
-      if (length(fml_split) == 2) { # FE present 
-        y_tilde <- fixest::demean(y, f = fe_df, na.rm = TRUE)
-        X_tilde <- fixest::demean(X, f = fe_df, na.rm = TRUE)
-      } else {
-        y_tilde <- y
-        X_tilde <- X
-      }
-      fit <- quantreg::rq.fit(x = X_tilde, y = y_tilde)
-      r <- stats::residuals(fit)
-      if (is.null(scale)) scale <- madn(r)
-      beta_old <- stats::coef(fit)
-    } else { # scale_est == "lad_mm"
-      brs <- mmfeqr.brs(y, X, fe_df)
-      r <- brs$r
-      if (is.null(scale)) scale <- brs$s
-      beta_old <- brs$b
-    }
-  } 
+  } else if (scale_est == "lad_mm_rsc") {
+    brs <- lad_mm_rsc(fml, data)
+    r <- brs$r
+    if (is.null(scale)) scale <- brs$s
+    beta_old <- brs$b
+  } else if (scale_est == "lad_mm_ms") {
+    brs <- lad_mm_ms(fml, data)
+    r <- brs$r
+    if (is.null(scale)) scale <- brs$s
+    beta_old <- brs$b
+  } else { # this should not happen if allowed_scale_ests is current
+    stop(paste(
+      sprintf("Unknown scale estimation: '%s'.", scale_est),
+      "This should not happen. Please report this error."
+    ))
+  }
 
   if (length(r) == 0) stop(
     "Initial fit has no residuals; check formula/data."
@@ -481,9 +596,11 @@ vcov.ferols <- function(
     V <- scale^2 * XtPhiX_inv %*% M %*% XtPhiX_inv
     
     # CR1-ish finite sample correction
-    n <- nrow(Xr)
-    p <- ncol(Xr)
-    V <- (G / (G - 1)) * ((n - 1) / (n - p)) * V
+    n <- object$nobs
+    temp_obj <- object
+    class(temp_obj) <- setdiff(class(temp_obj), "ferols")
+    k <- fixest::degrees_freedom(temp_obj, vcov = vcov, type = "k") 
+    V <- (G / (G - 1)) * ((n - 1) / (n - k)) * V
     
     colnames(V) <- colnames(X)
     rownames(V) <- colnames(X)
