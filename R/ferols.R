@@ -71,85 +71,38 @@ fe_dummies <- function(f) {
 
 lad_mm_ms <- function(fml, data, tau = 0.5) {
   fml_split <- fixest:::fml_split(fml, raw = TRUE)
-  mf_main <- stats::model.frame(fml_split[[1]], data)
-  y <- as.numeric(stats::model.response(mf_main))
-  X <- stats::model.matrix(fml_split[[1]], data = mf_main)
-  if (length(fml_split) == 2) { # FE present 
-    if ("(Intercept)" %in% colnames(X)) {
-      X <- X[, colnames(X) != "(Intercept)", drop = FALSE]
-    }
+  if (length(fml_split) == 2) {
     fe_vars <- all.vars(fml_split[[2]])
-    ridx <- as.integer(rownames(mf_main))
-    fe <- data[ridx, fe_vars, drop = FALSE]
-  } else {
-    fe <- NULL
-    fe_vars <- NULL
-  }
-  
-  X <- as.matrix(X)
-  n <- length(y)
-  if (nrow(X) != n) stop("y and X must have compatible rows.")
-  k0 <- ncol(X)
-  if (k0 == 0) stop("no independent variables present in model")
-  
-  # --- Build design matrix, absorbing the fixed effect with most levels -------
-  Xfull <- X
-  idx_abs <- NA_integer_
-  id <- rep(1L, n) # dummy single group if no FE
-  
-  if (!is.null(fe)) {
-    fe <- as.data.frame(fe)
-    if (nrow(fe) != n) stop("fe must have same number of rows as y/X.")
-    
-    n_levels <- vapply(fe, function(v) nlevels(factor(v)), integer(1))
+    n_levels <- vapply(fe_vars, function(v) nlevels(factor(data[,v])), integer(1))
     idx_abs <- which.max(n_levels)
-    id <- as.integer(factor(fe[[idx_abs]]))
-    
-    if (ncol(fe) > 1) {
-      fe_small <- fe[, -idx_abs, drop = FALSE]
-      dm_list <- lapply(
-        seq_len(ncol(fe_small)), function(j) fe_dummies(fe_small[[j]])
-      )
-      dm <- if (length(dm_list)) do.call(cbind, dm_list) else NULL
-      if (!is.null(dm) && ncol(dm) > 0) {
-        colnames(dm) <- make.unique(colnames(dm))
-        Xfull <- cbind(Xfull, dm)
-      }
+    main_fml <- fml_split[[1]]
+    fe_fml <- fml_split[[2]]
+    dummy_fes <- fe_vars[-idx_abs]
+    if (length(dummy_fes) > 0) {
+      add_terms <- paste0("i(", dummy_fes, ")", collapse = " + ")
+      main_fml <- stats::update.formula(main_fml, paste(". ~ . +", add_terms))
     }
-  } 
-  
-  # --- Calculate group means and overall means for y and X --------------------
-  ym <- as.numeric(gmean_expand(matrix(y, n, 1), id))
-  Xm <- gmean_expand(Xfull, id)
-  yd <- y - ym
-  Xd <- Xfull - Xm
-  
-  # global
-  ybar <- mean(y)
-  Xbar <- colMeans(Xfull)
+    absorb_fe <- fe_vars[idx_abs]
+    fe_fml <- stats::as.formula(paste("~", absorb_fe))
+    fml_loc <- stats::as.formula(
+      paste(deparse(main_fml), "|", deparse(fe_fml[[2]]))
+    )
+  } else {fml_loc <- fml} 
   
   # --- Estimate location ------------------------------------------------------
-  bL <- qr.coef(qr(Xd), yd)
-  bL[!is.finite(bL)] <- 0
-  beta0 <- ybar - drop(Xbar %*% bL)
-  # Stata always has an intercept....
-  alpha <- as.numeric(ym - drop(Xm %*% bL) - beta0) 
-  e <- as.numeric(yd - drop(Xd %*% bL))         
-  
-  # --- Estimate scale ---------------------------------------------------------
+  fit_loc <- fixest::feols(fml_loc, data, warn = FALSE, notes = FALSE)
+  yhat_loc <- as.numeric(stats::fitted(fit_loc))
+  y <- as.numeric(data[, as.character(fml[[2]]), drop = TRUE])
+  e <- y - yhat_loc
   Ipos <- as.numeric(e >= 0)
-  Ibar <- mean(Ipos)  
-  r_raw <- 2 * e * (Ipos - Ibar)
-  
-  rm <- as.numeric(gmean_expand(matrix(r_raw, n, 1), id))
-  rd <- r_raw - rm
-  
-  bS <- qr.coef(qr(Xd), rd)
-  bS[!is.finite(bS)] <- 0
-  gamma0 <- mean(r_raw) - drop(Xbar %*% bS)
-  
-  delta_raw <- as.numeric(rm - drop(Xm %*% bS))
-  denom <- as.numeric(drop(Xfull %*% bS) + delta_raw)
+  Ibar <- mean(Ipos)
+  data$r_raw <-  2 * e * (Ipos - Ibar)
+
+  # --- Estimate scale ---------------------------------------------------------
+  fml_scl <- fml
+  fml_scl[[2]] <- substitute(r_raw)
+  fit_scl <- fixest::feols(fml_scl, data, warn = FALSE, notes = FALSE)
+  denom <- as.numeric(stats::fitted(fit_scl))
   
   # Avoiding numerical issues causing scale estimates to become zero 
   eps <- sqrt(.Machine$double.eps)
@@ -157,28 +110,25 @@ lad_mm_ms <- function(fml, data, tau = 0.5) {
   
   u <- e / denom
   qhat <- as.numeric(stats::quantile(u, probs = tau, type = 7, names = FALSE))
-  delta <- delta_raw - gamma0
-  bT <- bL + bS * qhat
-  beta0T <- beta0 + gamma0 * qhat
-  yhat_tau <- as.numeric(beta0T + drop(Xfull %*% bT) + alpha + delta * qhat)
-  resid_tau <- y - yhat_tau
-  
-  # --- Calculate scale based on prob adjusted for resid dof -------------------
-  ni <- length(unique(id))
-  rank_Xd <- qr(Xd)$rank
-  df_initial <- n - ni - rank_Xd
+  resid_tau <- y - (yhat_loc + qhat * denom)
+  df_initial <- fixest::degrees_freedom(fit_loc, type = "resid") 
+  n <- fit_loc$nobs
   pprob <- (2 * n - df_initial) / (2 * n)
+  
   s <- as.numeric(
     stats::quantile(abs(resid_tau), probs = pprob, type = 7, names = FALSE)) /
     stats::qnorm(0.75)
   
+  bL <- stats::coef(fit_loc)
+  bS <- stats::coef(fit_scl)
+  bT <- bL + bS * qhat
+  
   list(
-    b = bT[seq_len(k0)],
+    b = as.numeric(bT),
     r = resid_tau,
     s = s
   )
 }
-
 
 # ------------------------------------------------------------------------------
 # Following methods of moment approach as in 
