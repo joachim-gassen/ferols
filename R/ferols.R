@@ -29,10 +29,8 @@ huber_k_from_eff <- function(eff_target) {
 huber_psi <- function(z, k) ifelse(abs(z) <= k, z, k * sign(z))
 
 huber_w   <- function(z, k) {
-  out <- rep(1, length(z))
-  nz <- (z != 0)
-  out[nz] <- pmin(1, k / abs(z[nz]))
-  out
+  abs_z <- pmax(abs(z), sqrt(.Machine$double.eps))
+  pmin(1, k / abs_z)
 }
 
 huber_phi <- function(z, k) as.numeric(abs(z) <= k)
@@ -91,33 +89,36 @@ lad_mm_ms <- function(fml, data, tau = 0.5) {
   
   # --- Estimate location ------------------------------------------------------
   fit_loc <- fixest::feols(fml_loc, data, warn = FALSE, notes = FALSE)
-  yhat_loc <- as.numeric(stats::fitted(fit_loc))
+  yhat_loc <- as.numeric(stats::fitted(fit_loc, na.rm = FALSE))
   y <- as.numeric(data[, as.character(fml[[2]]), drop = TRUE])
   e <- y - yhat_loc
   Ipos <- as.numeric(e >= 0)
-  Ibar <- mean(Ipos)
+  Ibar <- mean(Ipos, na.rm = TRUE)
   data$r_raw <-  2 * e * (Ipos - Ibar)
 
   # --- Estimate scale ---------------------------------------------------------
   fml_scl <- fml_loc
   fml_scl[[2]] <- substitute(r_raw)
   fit_scl <- fixest::feols(fml_scl, data, warn = FALSE, notes = FALSE)
-  denom <- as.numeric(stats::fitted(fit_scl))
+  denom <- as.numeric(stats::fitted(fit_scl, na.rm = FALSE))
   
   # Avoiding numerical issues causing scale estimates to become zero 
   eps <- sqrt(.Machine$double.eps)
   denom <- pmax(denom, eps)
   
   u <- e / denom
-  qhat <- as.numeric(stats::quantile(u, probs = tau, type = 7, names = FALSE))
+  qhat <- as.numeric(stats::quantile(
+    u, probs = tau, type = 7, names = FALSE, na.rm = TRUE
+  ))
   resid_tau <- y - (yhat_loc + qhat * denom)
   df_initial <- fixest::degrees_freedom(fit_loc, type = "resid") 
   n <- fit_loc$nobs
   pprob <- (2 * n - df_initial) / (2 * n)
   
   s <- as.numeric(
-    stats::quantile(abs(resid_tau), probs = pprob, type = 7, names = FALSE)) /
-    stats::qnorm(0.75)
+    stats::quantile(
+      abs(resid_tau), probs = pprob, type = 7, names = FALSE, na.rm = TRUE)
+    ) / stats::qnorm(0.75)
   
   bL <- stats::coef(fit_loc)
   bS <- stats::coef(fit_scl)
@@ -141,33 +142,36 @@ lad_mm_ms <- function(fml, data, tau = 0.5) {
 lad_mm_rsc <- function(fml, data, tau = 0.5) {
   # --- Estimate location ------------------------------------------------------
   fit_loc <- fixest::feols(fml, data, warn = FALSE, notes = FALSE)
-  yhat_loc <- as.numeric(stats::fitted(fit_loc))
+  yhat_loc <- as.numeric(stats::fitted(fit_loc, na.rm = FALSE))
   y <- as.numeric(data[, as.character(fml[[2]]), drop = TRUE])
   e <- y - yhat_loc
   Ipos <- as.numeric(e >= 0)
-  Ibar <- mean(Ipos)
+  Ibar <- mean(Ipos, na.rm = TRUE)
   data$r_raw <-  2 * e * (Ipos - Ibar)
   
   # --- Estimate scale ---------------------------------------------------------
   fml_scl <- fml
   fml_scl[[2]] <- substitute(r_raw)
   fit_scl <- fixest::feols(fml_scl, data, warn = FALSE, notes = FALSE)
-  denom <- as.numeric(stats::fitted(fit_scl))
+  denom <- as.numeric(stats::fitted(fit_scl, na.rm = FALSE))
   
   # Avoiding numerical issues causing scale estimates to become zero 
   eps <- sqrt(.Machine$double.eps)
   denom <- pmax(denom, eps)
 
   u <- e / denom
-  qhat <- as.numeric(stats::quantile(u, probs = tau, type = 7, names = FALSE))
+  qhat <- as.numeric(stats::quantile(
+    u, probs = tau, type = 7, names = FALSE, na.rm = TRUE
+  ))
   resid_tau <- y - (yhat_loc + qhat * denom)
   df_initial <- fixest::degrees_freedom(fit_loc, type = "resid") 
   n <- fit_loc$nobs
   pprob <- (2 * n - df_initial) / (2 * n)
   
   s <- as.numeric(
-    stats::quantile(abs(resid_tau), probs = pprob, type = 7, names = FALSE)) /
-    stats::qnorm(0.75)
+    stats::quantile(
+      abs(resid_tau), probs = pprob, type = 7, names = FALSE, na.rm = TRUE)
+    ) / stats::qnorm(0.75)
   
   bL <- stats::coef(fit_loc)
   bS <- stats::coef(fit_scl)
@@ -242,6 +246,11 @@ lad_mm_rsc <- function(fml, data, tau = 0.5) {
 #'   `robust` containing `k`, `scale`, `efficiency`, `converged`, `iter`,
 #'   `weights`, and `phi`.
 #'
+#' @examples
+#' df <- generate_panel_data(n_units = 50, n_time = 10, seed = 42)
+#' ferols(y ~ x + z | i + t, vcov = ~i, data = df)
+#' fixest::feols(y ~ x + z | i + t, vcov = ~i, data = df)
+#' 
 #' @export
 ferols <- function(
     fml, data, family = "huber",  efficiency = 0.95, 
@@ -279,8 +288,8 @@ ferols <- function(
   
   # --- Initial fit to estimate scale and starting beta ------------------------
   if (scale_est == "ols")  {
-    fit <- fixest::feols(fml, data = data, ...)
-    r <- stats::residuals(fit)
+    fit <- fixest::feols(fml, data = data, warn = FALSE, notes = FALSE, ...)
+    r <- stats::residuals(fit, na.rm = FALSE)
     if (is.null(scale)) scale <- madn(r)
     beta_old <- stats::coef(fit)
   } else if (scale_est == "lad_mm_rsc") {
@@ -310,7 +319,7 @@ ferols <- function(
   ))
 
   k <- huber_k_from_eff(efficiency)
-    z <- r / scale
+  z <- r / scale
   w <- huber_w(z, k)
   phi <- huber_phi(z, k)
   
@@ -320,7 +329,9 @@ ferols <- function(
   
   for (it in seq_len(max_iter)) {
     iter_done <- it
-    fit_new <- fixest::feols(fml, data = data, weights = w, ...)
+    fit_new <- fixest::feols(
+      fml, data = data, weights = w, warn = FALSE, notes = FALSE, ...
+    )
     
     beta_new <- stats::coef(fit_new)
     if (anyNA(beta_new)) stop(
@@ -338,7 +349,7 @@ ferols <- function(
     fit <- fit_new
     beta_old <- beta_new
     
-    r <- stats::residuals(fit)
+    r <- stats::residuals(fit, na.rm = FALSE)
     z <- r / scale
     w <- huber_w(z, k)
     phi <- huber_phi(z, k)
@@ -520,7 +531,7 @@ vcov.ferols <- function(
     X <- stats::model.matrix(object, type = "rhs")
     
     # Get parameters from estimation object
-    phi <- object$robust$phi
+    phi <- object$robust$phi[! is.na(object$robust$phi)]
     scale <- object$robust$scale
     k <- object$robust$k
     r <- stats::residuals(object)

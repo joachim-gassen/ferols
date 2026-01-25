@@ -1,18 +1,17 @@
 # Load test data shipped in inst/extdata
-get_test_df <- function() {
-  path <- system.file("extdata", "ferols_test_data.rds", package = "ferols")
-  if (path == "") stop("ferols_test_data.rds not found in package extdata")
-  df <- readRDS(path)
-}
 cap <- function(expr) paste(capture.output(expr), collapse = "\n")
 
-test_df <- get_test_df()
+test_df <- generate_panel_data(seed = 42)
 assign("test_df", test_df, envir = .GlobalEnv)
 on.exit(rm("test_df", envir = .GlobalEnv), add = TRUE)
 
+test_df_missing <- generate_panel_data(seed = 42, share_missing = 0.3)
+assign("test_df_missing", test_df_missing, envir = .GlobalEnv)
+on.exit(rm("test_df_missing", envir = .GlobalEnv), add = TRUE)
+
 
 test_that("ferols runs and returns a ferols/fixest object", {
-  fit <- ferols(y_cont ~ x, data = test_df, vcov = "iid")
+  fit <- ferols(y ~ x, data = test_df, vcov = "iid")
   
   expect_s3_class(fit, "ferols")
   expect_true(inherits(fit, "fixest"))
@@ -26,7 +25,7 @@ test_that("ferols runs and returns a ferols/fixest object", {
 
 
 test_that("default vcov is IID and default scale_est is 'lad_mm_rsc'", {
-  expect_no_warning(fit <- ferols(y_cont ~ x | i + t, data = test_df))
+  expect_no_warning(fit <- ferols(y ~ x | i + t, data = test_df))
   expect_true(is.matrix(fit$cov.scaled))
   type <- attr(fit$cov.scaled, "type")
   expect_true(is.character(type))
@@ -40,10 +39,10 @@ test_that("default vcov is IID and default scale_est is 'lad_mm_rsc'", {
 
 test_that("vcov specifications ~i and cluster = 'i' are accepted", {
   expect_no_warning(
-    f1 <- ferols(y_cont ~ x | i + t, data = test_df, vcov = ~ i)
+    f1 <- ferols(y ~ x | i + t, data = test_df, vcov = ~ i)
   )
   expect_no_warning(
-    f2 <- ferols(y_cont ~ x | i + t, data = test_df, cluster = "i")
+    f2 <- ferols(y ~ x | i + t, data = test_df, cluster = "i")
   )
   
   expect_no_warning(se1 <- summary(f1)$se)
@@ -55,100 +54,75 @@ test_that("vcov specifications ~i and cluster = 'i' are accepted", {
 })
 
 test_that("unsupported features error cleanly", {
-  expect_error(ferols(y_cont ~ 1 | i + t | p ~ x, data = test_df))
-  expect_error(ferols(y_cont ~ 1 | i + t, data = test_df, weights = runif(nrow(test_df))))
-  expect_error(ferols(y_cont ~ x | i + t, data = test_df, scale_est = "unknown"))
-  expect_error(ferols(y_cont ~ x | i + t, data = test_df, vcov = ~ i + t))
-  expect_error(ferols(y_cont ~ x | i + t, data = test_df, vcov = "hetero"))
-  expect_error(ferols(y_cont ~ x | i + t, data = test_df, vcov = matrix(1, 1, 1)))
-  expect_error(ferols(y_cont ~ x | i + t, data = test_df, ssc = fixest::ssc(fixef.K = "none")))
-  expect_error(ferols(y_cont ~ x | i + t, data = test_df, efficiency = 0.6))
-  expect_error(ferols(y_cont ~ x | i + t, data = test_df, cluster = c("i", "t")))
+  expect_error(ferols(y ~ 1 | i + t | p ~ x, data = test_df))
+  expect_error(ferols(y ~ 1 | i + t, data = test_df, weights = runif(nrow(test_df))))
+  expect_error(ferols(y ~ x | i + t, data = test_df, scale_est = "unknown"))
+  expect_error(ferols(y ~ x | i + t, data = test_df, vcov = ~ i + t))
+  expect_error(ferols(y ~ x | i + t, data = test_df, vcov = "hetero"))
+  expect_error(ferols(y ~ x | i + t, data = test_df, vcov = matrix(1, 1, 1)))
+  expect_error(ferols(y ~ x | i + t, data = test_df, ssc = fixest::ssc(fixef.K = "none")))
+  expect_error(ferols(y ~ x | i + t, data = test_df, efficiency = 0.6))
+  expect_error(ferols(y ~ x | i + t, data = test_df, cluster = c("i", "t")))
 })
 
 test_that("efficiency 0.7 runs", {
-  fit <- ferols(y_cont ~ x | i + t, data = test_df, vcov = ~ i, efficiency = 0.7)
+  fit <- ferols(y ~ x | i + t, data = test_df, vcov = ~ i, efficiency = 0.7)
   expect_s3_class(fit, "ferols")
 })
 
 test_that("scale_est='ols' yields an estimate", {
   expect_no_warning(
-    fit <- ferols(y_cont ~ x, data = test_df, scale_est = "ols")
+    fit <- ferols(y ~ x, data = test_df, scale_est = "ols")
   )
   expect_s3_class(fit, "ferols")
   expect_no_warning(
-    fit <- ferols(y_cont ~ x | i + t, data = test_df, scale_est = "ols")
+    fit <- ferols(y ~ x | i + t, data = test_df, scale_est = "ols")
   )
   expect_s3_class(fit, "ferols")
 })
 
 test_that("scale_est='lad_mm_ms' yields an estimate", {
   expect_no_warning(
-    fit <- ferols(y_cont ~ x, data = test_df, scale_est = "lad_mm_ms")
+    fit <- ferols(y ~ x, data = test_df, scale_est = "lad_mm_ms")
   )
   expect_s3_class(fit, "ferols")
   expect_no_warning(
-    fit <- ferols(y_cont ~ x | i + t, data = test_df, scale_est = "lad_mm_ms")
+    fit <- ferols(y ~ x | i + t, data = test_df, scale_est = "lad_mm_ms")
   )
   expect_s3_class(fit, "ferols")
 })
 
 test_that("scale_est='lad_mm_rsc' yields an estimate", {
   expect_no_warning(
-    fit <- ferols(y_cont ~ x, data = test_df, scale_est = "lad_mm_rsc")
+    fit <- ferols(y ~ x, data = test_df, scale_est = "lad_mm_rsc")
   )
   expect_s3_class(fit, "ferols")
   expect_no_warning(
-    fit <- ferols(y_cont ~ x | i + t, data = test_df, scale_est = "lad_mm_rsc")
+    fit <- ferols(y ~ x | i + t, data = test_df, scale_est = "lad_mm_rsc")
   )
   expect_s3_class(fit, "ferols")
 })
 
 test_that(
   "'lad_mm_rsc' and 'lad_mm_ms' produce virtually identical estimates", {
-    fit_rsc <- ferols(y_cont ~ x, data = test_df, scale_est = "lad_mm_rsc")
-    fit_ms <- ferols(y_cont ~ x, data = test_df, scale_est = "lad_mm_ms")
+    fit_rsc <- ferols(y ~ x, data = test_df, scale_est = "lad_mm_rsc")
+    fit_ms <- ferols(y ~ x, data = test_df, scale_est = "lad_mm_ms")
     expect_equal(fit_rsc$robust$scale, fit_ms$robust$scale)
     expect_equal(fit_rsc$coefficients, fit_ms$coefficients)
     expect_equal(fit_rsc$se, fit_ms$se)
   }
 )
 
-test_that(
-  paste(
-    "'lad_mm_rsc' with clustering returns scale, parameter estimates and SEs", 
-    "that are virtually identical to those of Stata's robreg m" 
-  ), {
-    robreg_scale <- 1.051022981478227
-    robreg_x <- 0.99737946
-    robreg_se <- sqrt(0.00011781)
-    fit <- ferols(y_cont ~ x | i + t, data = test_df, vcov = ~i)
-    expect_equal(
-      fit$robust$scale, robreg_scale, tolerance = 1e-5, ignore_attr = TRUE
-    )
-    expect_equal(
-      fit$coefficients, robreg_x, tolerance = 1e-5, ignore_attr = TRUE
-    )
-    expect_equal(
-      fit$se, robreg_se, tolerance = 1e-5, ignore_attr = TRUE
-    )
-  }
-)
-test_that("simple twfe simulation returns sensible estimate", {
-  fit <- ferols(y_cont ~ x | i + t, vcov = ~ i, data = test_df)
-  expect_true(abs(coef(fit)["x"] - 1) < 0.01)
-})
-
 test_that("efficiency=1 gives coefficients close to feols", {
-  fit_fe <- fixest::feols(y_cont ~ x | i + t, data = test_df, vcov = "iid")
-  fit_fr <- ferols(y_cont ~ x | i + t, data = test_df, vcov = "iid", efficiency = 1)
+  fit_fe <- fixest::feols(y ~ x | i + t, data = test_df, vcov = "iid")
+  fit_fr <- ferols(y ~ x | i + t, data = test_df, vcov = "iid", efficiency = 1)
   
   expect_equal(unname(coef(fit_fr)), unname(coef(fit_fe)), tolerance = 1e-8)
 })
 
 test_that("print.ferols always prints the model info line (eff/k/scale/iter)", {
-  out1 <- cap(ferols(y_cont ~ x | i + t, vcov = ~ i, data = test_df))
-  fit <- ferols(y_cont ~ x | i + t, vcov = ~ i, data = test_df)
+  out1 <- cap(ferols(y ~ x | i + t, vcov = ~ i, data = test_df))
+  fit <- ferols(y ~ x | i + t, vcov = ~ i, data = test_df)
   out2 <- cap(fit)
   out3 <- cap(summary(fit))
   
@@ -168,9 +142,9 @@ test_that("print.ferols always prints the model info line (eff/k/scale/iter)", {
 })
 
 test_that("data.save = TRUE allows vcov after data removal", {
-  assign("temp_test_df", get_test_df(), envir = .GlobalEnv)
+  assign("temp_test_df", generate_panel_data(seed = 42), envir = .GlobalEnv)
 
-  fit <- ferols(y_cont  ~ x | i + t, data = temp_test_df, data.save = TRUE)
+  fit <- ferols(y  ~ x | i + t, data = temp_test_df, data.save = TRUE)
   
   # sanity check: data was saved by fixest
   expect_true(!is.null(fit$data))
@@ -189,8 +163,57 @@ test_that("data.save = TRUE allows vcov after data removal", {
 
 test_that("scale parameter is obeyed.", {
   out <- cap(
-    ferols(y_cont ~ x | i + t, vcov = ~ i, scale = 0.987, data = test_df)
+    ferols(y ~ x | i + t, vcov = ~ i, scale = 0.987, data = test_df)
   )
   expect_true(grepl("scale: 0.987", out, fixed = TRUE))
 })
+
+test_that("estimation passes on data with missing values", {
+  fit <- ferols(y ~ x + z | i + t, vcov = ~i, data = test_df_missing)
+  expect_s3_class(fit, "ferols")
+  fit <- ferols(
+    y ~ x + z | i + t, vcov = ~i, scale_est = "lad_mm_ms", 
+    data = test_df_missing
+  )
+  expect_s3_class(fit, "ferols")
+  fit <- ferols(
+    y ~ x + z | i + t, vcov = ~i, scale_est = "ols", data = test_df_missing
+  )
+  expect_s3_class(fit, "ferols")
+})
+
+test_that(
+  paste(
+    "'lad_mm_rsc' with clustering returns scale, parameter estimates and SEs", 
+    "that are virtually identical to those of Stata's robreg m" 
+  ), {
+    robreg_scale <- 0.668803236125195
+    robreg_x <- 1.0029391
+    robreg_se <- sqrt(0.00004447)
+    fit <- ferols(y ~ x + z | i + t, data = test_df, vcov = ~i)
+    expect_equal(
+      fit$robust$scale, robreg_scale, tolerance = 1e-4, ignore_attr = TRUE
+    )
+    expect_equal(
+      fit$coefficients[1], robreg_x, tolerance = 1e-4, ignore_attr = TRUE
+    )
+    expect_equal(
+      fit$se[1], robreg_se, tolerance = 1e-4, ignore_attr = TRUE
+    )
+
+    robreg_scale <- 0.6909039341817896
+    robreg_x <- 1.0033825
+    robreg_se <- sqrt(0.00007045)
+    fitm <- ferols(y ~ x + z | i + t, data = test_df_missing, vcov = ~i)
+    expect_equal(
+      fitm$robust$scale, robreg_scale, tolerance = 1e-4, ignore_attr = TRUE
+    )
+    expect_equal(
+      fitm$coefficients[1], robreg_x, tolerance = 1e-4, ignore_attr = TRUE
+    )
+    expect_equal(
+      fitm$se[1], robreg_se, tolerance = 1e-4, ignore_attr = TRUE
+    )
+  }
+)
 

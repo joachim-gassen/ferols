@@ -95,3 +95,9 @@ Fixed effects are absorbed using \code{fixest::demean}.
 Standard errors can be clustered via one dimension using a Huber (psi/phi)
 sandwich estimator.
 }
+\examples{
+df <- generate_panel_data(n_units = 50, n_time = 10, seed = 42)
+ferols(y ~ x + z | i + t, vcov = ~i, data = df)
+fixest::feols(y ~ x + z | i + t, vcov = ~i, data = df)
+
+}
