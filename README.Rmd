@@ -87,7 +87,7 @@ with three components:
 - **Time component** ($r_{it}$): follows an AR(1) process over units within each
   time period (cross-sectional dependence within time)
 
-- **Idiosyncratic component** ($eta_{it}$): i.i.d. noise
+- **Idiosyncratic component** ($\eta_{it}$): i.i.d. noise
 
 This construction induces two-way dependence consistent with the simulation 
 logic in Petersen (2009).
