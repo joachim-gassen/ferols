@@ -16,7 +16,7 @@ License: MIT + file LICENSE
 Encoding: UTF-8
 LazyData: true
 Depends: R (>= 4.0)
-Imports: fixest (>= 0.13.2), stats
+Imports: fixest (>= 0.13.2), quantreg, stats
 Suggests: testthat (>= 3.0.0), moments
 Config/testthat/edition: 3
 Roxygen: list(markdown = TRUE)

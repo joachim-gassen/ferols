@@ -9,7 +9,7 @@ ferols(
   data,
   family = "huber",
   efficiency = 0.95,
-  scale_est = "lad_mm_rsc",
+  scale_est = NULL,
   scale = NULL,
   tol = 1e-10,
   max_iter = 200,
@@ -30,12 +30,15 @@ ferols(
 \item{efficiency}{Target normal-efficiency in (0.68, 1). Default 0.95.}
 
 \item{scale_est}{Algorithm to estimate the residuals that are used to
-estimate the scale. Defaults to \code{"lad_mm_rsc"}.
+estimate the scale. Defaults to \code{"lad_rq"} when no fixed effects are
+present. Otherwise, it defaults to \code{"lad_mm_rsc"}.
 \itemize{
 \item \code{"ols"}: Uses \code{fixest:feols()} with absorbed fixed effects to derive
 the initial residuals.
-\item \code{"lad_mm_ms"}: Uses an method of moments algorithm for the median quantile
-regression introduced by Machado and Santos Silva
+\item \code{"lad_rq"}: Uses absolute residuals from a normal median/LAD regression
+(calling \code{quantreg::rq()}) to estimate the scale.
+\item \code{"lad_mm_ms"}: Uses an method of moments algorithm for the median
+quantile regression introduced by Machado and Santos Silva
 (2019, https://doi.org/10.1016/j.jeconom.2019.04.009).
 This should yield similar scale and beta estimates as the approaches of
 the Stata packages \code{robreg} (https://github.com/benjann/robreg) and

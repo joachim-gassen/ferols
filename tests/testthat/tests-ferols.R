@@ -214,6 +214,16 @@ test_that(
     expect_equal(
       fitm$se[1], robreg_se, tolerance = 1e-4, ignore_attr = TRUE
     )
+    
+    robreg_scale <- 0.79386884
+    robreg_x <- 1.005568
+    fit0 <- ferols(y ~ x + z, data = test_df)
+    expect_equal(
+      fit0$robust$scale, robreg_scale, tolerance = 1e-4, ignore_attr = TRUE
+    )
+    expect_equal(
+      fit0$coefficients[2], robreg_x, tolerance = 1e-4, ignore_attr = TRUE
+    )
   }
 )
 

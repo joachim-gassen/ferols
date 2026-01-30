@@ -60,6 +60,30 @@ fe_dummies <- function(f) {
 }
 
 # ------------------------------------------------------------------------------
+# Simple LAD based on quantreg::rq. Used by default when no fixed effects are
+# to be absorbed. Seems to be what Stata's robreg does as well.
+# ------------------------------------------------------------------------------
+lad_rq <- function(fml, data, tau = 0.5) {
+  fit_rq <- quantreg::rq(fml, data = data, tau = 0.5)
+  y <- as.numeric(data[, as.character(fml[[2]]), drop = TRUE])
+  resid_tau <- y - stats::fitted(fit_rq, na.rm = FALSE)
+  n <- length(fit_rq$y)
+  df_initial <- n - length(fit_rq$coefficients)
+  pprob <- (2 * n - df_initial) / (2 * n)
+  
+  s <- as.numeric(
+    stats::quantile(
+      abs(resid_tau), probs = pprob, type = 7, names = FALSE, na.rm = TRUE)
+  ) / stats::qnorm(0.75)
+  
+  list(
+    b = stats::coef(fit_rq),
+    r = resid_tau,
+    s = s
+  )
+}
+
+# ------------------------------------------------------------------------------
 # Method of moments quantile estimator as introduced by
 # Machado and Santos Silva (2019) 
 # https://doi.org/10.1016/j.jeconom.2019.04.009
@@ -200,11 +224,14 @@ lad_mm_rsc <- function(fml, data, tau = 0.5) {
 #' @param data A data.frame.
 #' @param family Robust loss family. Currently only `"huber"`.
 #' @param scale_est Algorithm to estimate the residuals that are used to 
-#'  estimate the scale. Defaults to `"lad_mm_rsc"`.
+#'  estimate the scale. Defaults to `"lad_rq"` when no fixed effects are 
+#'  present. Otherwise, it defaults to `"lad_mm_rsc"`.
 #'    - `"ols"`: Uses `fixest:feols()` with absorbed fixed effects to derive 
 #'      the initial residuals.
-#'    - `"lad_mm_ms"`: Uses an method of moments algorithm for the median quantile 
-#'      regression introduced by Machado and Santos Silva 
+#'    - `"lad_rq"`: Uses absolute residuals from a normal median/LAD regression 
+#'       (calling `quantreg::rq()`) to estimate the scale.   
+#'    - `"lad_mm_ms"`: Uses an method of moments algorithm for the median 
+#'      quantile regression introduced by Machado and Santos Silva 
 #'      (2019, https://doi.org/10.1016/j.jeconom.2019.04.009). 
 #'      This should yield similar scale and beta estimates as the approaches of 
 #'      the Stata packages `robreg` (https://github.com/benjann/robreg) and 
@@ -254,7 +281,7 @@ lad_mm_rsc <- function(fml, data, tau = 0.5) {
 #' @export
 ferols <- function(
     fml, data, family = "huber",  efficiency = 0.95, 
-    scale_est = "lad_mm_rsc", scale = NULL, tol = 1e-10, max_iter = 200, 
+    scale_est = NULL, scale = NULL, tol = 1e-10, max_iter = 200, 
     vcov = NULL, cluster = NULL, ssc = NULL, se = NULL, ...
 ) {
   if (!requireNamespace("fixest", quietly = TRUE)) {
@@ -276,7 +303,11 @@ ferols <- function(
   if (length(fml_split) > 2) stop(
     "Three part formulae (including IVs) are not supported by ferols()."
   )
-  allowed_scale_ests <- c("ols", "lad_mm_ms", "lad_mm_rsc")
+  if (is.null(scale_est)) {
+    if (length(fml_split) == 1) scale_est <- "lad_rq" 
+    else scale_est <- "lad_mm_rsc"
+  }
+  allowed_scale_ests <- c("ols", "lad_mm_ms", "lad_mm_rsc", "lad_rq")
   if (! scale_est %in% allowed_scale_ests) {
     stop(sprintf(
       paste(
@@ -287,11 +318,18 @@ ferols <- function(
   } 
   
   # --- Initial fit to estimate scale and starting beta ------------------------
+  
+  
   if (scale_est == "ols")  {
     fit <- fixest::feols(fml, data = data, warn = FALSE, notes = FALSE, ...)
     r <- stats::residuals(fit, na.rm = FALSE)
     if (is.null(scale)) scale <- madn(r)
     beta_old <- stats::coef(fit)
+  } else if (scale_est == "lad_rq") {
+    brs <- lad_rq(fml, data)
+    r <- brs$r
+    if (is.null(scale)) scale <- brs$s
+    beta_old <- brs$b
   } else if (scale_est == "lad_mm_rsc") {
     brs <- lad_mm_rsc(fml, data)
     r <- brs$r
