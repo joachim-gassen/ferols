@@ -10,18 +10,18 @@
 \item{object}{A \code{ferols} object.}
 
 \item{vcov}{Variance–covariance specification. Either \code{"iid"},
-\code{"cluster"}, or a one-sided formula such as \code{~ id} or
-\code{cluster ~ id}. Defaults to clustering on the first fixed effect
-if present.}
+\code{"hetero"}, \code{"cluster"}, \code{"twoway"} or a formula
+such as \code{~ id} or  \code{cluster ~ id + time}.
+Defaults to heteroskedasticity-robust (White) standard errors.}
 
 \item{cluster}{Deprecated. Use \code{vcov} instead.}
 
 \item{se}{Deprecated. Use \code{vcov} instead.}
 
-\item{ssc}{Small-sample correction. Not configurable yet and
-must be \code{NULL}.}
+\item{ssc}{Small-sample correction. Passed on to
+\code{"fixest::vocov.fixest"}.}
 
-\item{...}{Additional arguments (currently ignored).}
+\item{...}{Additional arguments (passed on to \code{"fixest::vocov.fixest"}).}
 }
 \value{
 A variance–covariance matrix with coefficient names as row and
@@ -36,7 +36,7 @@ with either no clustering or one-way clustering.
 }
 \details{
 This function is experimental and implements only a subset of the
-variance estimators available in \code{fixest}. Multi-way clustering,
-alternative small-sample corrections, and user-supplied covariance
-estimators are not yet supported.
+variance estimators available in \code{fixest}. Several panel robust
+estimators and user-supplied functions and covariance matrices are not
+supported.
 }

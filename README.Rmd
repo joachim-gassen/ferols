@@ -7,7 +7,7 @@ format: gfm
 regression estimator using **Huber M-estimation** with 
 **iteratively reweighted least squares (IRLS)**. It is inspired by 
 the [package `robtwfe` by David Veenman](https://github.com/dveenman/robtwfe). 
-It is build on and designed to integrate tightly with the
+and designed to integrate tightly with the
 [`fixest`](https://lrberge.github.io/fixest/) ecosystem.
 
 It builds on our recent work
@@ -22,7 +22,7 @@ and combines robust M-estimation (Huber loss) with:
 - fast estimation via `fixest::feols`,
 - several algorithms to estimate scale in the first step,
 - and a `fixest` style variance–covariance interface allowing for
-  one-way clustered Huber sandwich standard errors.
+  clustered sandwich standard errors.
 
 
 ## Why?
@@ -32,7 +32,7 @@ error distributions. While `fixest` provides fast and reliable estimation
 for large linear models with fixed effects, it does not currently offer
 robust estimators.
 
-The `ferols` package is a first step to fill this gap. It is intended to be 
+The `ferols` package is designed to fill this gap. It is intended to be 
 useful for settings with high-dimensional fixed effects (e.g. panel data with 
 unit and time effects) and offers robust inference via Huber ψ/φ sandwich 
 variance estimators, including clustered standard errors.
@@ -47,9 +47,8 @@ Rather it aims to fill a narrow gap as these packages currently do not allow
 to absorb fixed effects during estimation and might thus run in 
 performance/convergence problems in setting with many fixed effects.
 
-This package is under active development.  
-The API, implementation details, and numerical behavior may and probably will
-change. Use with care and 
+This package is under active development. The API, implementation details, and 
+numerical behavior may and probably will change. Use with care and 
 **do not rely on it to generate reproducible empirical results yet**.
 
 
@@ -72,8 +71,8 @@ $$
 y_{it} = \alpha_i + \lambda_t + x_{it}\beta + z_{it}\gamma + e_{it}
 $$
 
-where $\alpha_i$ and $\lambda_t$ are unit and time fixed effects, 
-respectively. The composite error is constructed as
+where $\alpha_i$ and $\lambda_t$ are unit and time fixed effects, respectively. 
+By default, $\beta = 1$ and $\gamma = 0$. The composite error is constructed as
 
 $$
 e_{it} = u_{it} + r_{it} + \eta_{it}
@@ -153,7 +152,7 @@ legend(
 
 ## Not yet implemented (sorted by priority)
 
-- Multi-way clustering
 - Alternative loss functions
+- Weighted regressions
 
 
