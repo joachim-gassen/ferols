@@ -59,34 +59,17 @@ huber_w   <- function(z, k) {
 huber_phi <- function(z, k) as.numeric(abs(z) <= k)
 
 madn <- function(x) {
-  stats::median(
-    abs(x - stats::median(x, na.rm = TRUE)), na.rm = TRUE
-  ) / stats::qnorm(0.75)
-}
-
-# Returns the group means at observation level
-gmean_expand <- function(v, g) {
-  g <- as.integer(g)
-  rs <- rowsum(v, g, reorder = FALSE, na.rm = TRUE)
-  n  <- as.numeric(tabulate(g, nbins = nrow(rs)))
-  gm <- rs / n
-  gm[g, , drop = FALSE]
-}
-
-# build FE dummies without intercept
-# drop first level per FE to avoid collinearity
-fe_dummies <- function(f) {
-  f <- factor(f)
-  mm <- stats::model.matrix(~ f - 1)
-  if (ncol(mm) > 0) mm <- mm[, -1, drop = FALSE]
-  mm
+  as.numeric(stats::quantile(
+    abs(x - stats::quantile(x, 1/2, na.rm = TRUE, type = 2)), 
+    1/2, type = 2, na.rm = TRUE
+  )) / stats::qnorm(0.75)
 }
 
 # ------------------------------------------------------------------------------
 # Simple LAD based on quantreg::rq. Used by default when no fixed effects are
 # to be absorbed. Seems to be what Stata's robreg does as well.
 # ------------------------------------------------------------------------------
-lad_rq <- function(fml, data, scale_adj_rlm = FALSE) {
+lad_rq <- function(fml, data, adj_rlm = FALSE) {
   fml_split <- fixest:::fml_split(fml, raw = TRUE)
   if (length(fml_split) == 2) {
     stop(paste(
@@ -101,7 +84,7 @@ lad_rq <- function(fml, data, scale_adj_rlm = FALSE) {
   y <- as.numeric(data[, as.character(fml[[2]]), drop = TRUE])
   resid_tau <- y - stats::fitted(fit_rq, na.rm = FALSE)
   
-  if (scale_adj_rlm) {
+  if (adj_rlm) {
     s <- median(abs(resid_tau))/0.6745
   } else {
     n <- length(fit_rq$y)
@@ -109,7 +92,7 @@ lad_rq <- function(fml, data, scale_adj_rlm = FALSE) {
     pprob <- (2 * n - df_initial) / (2 * n)
     s <- as.numeric(
       stats::quantile(
-        abs(resid_tau), probs = pprob, type = 7, names = FALSE, na.rm = TRUE)
+        abs(resid_tau), probs = pprob, type = 2, names = FALSE, na.rm = TRUE)
     ) / stats::qnorm(0.75)
   }
   
@@ -129,7 +112,7 @@ lad_rq <- function(fml, data, scale_adj_rlm = FALSE) {
 # ------------------------------------------------------------------------------
 
 lad_mm_ms <- function(
-    fml, data, scale_adj_rlm = FALSE, warn = TRUE, notes = TRUE
+    fml, data, adj_rlm = FALSE, warn = TRUE, notes = TRUE
 ) {
   fml_split <- fixest:::fml_split(fml, raw = TRUE)
   if (length(fml_split) == 2) {
@@ -172,11 +155,11 @@ lad_mm_ms <- function(
   
   u <- e / denom
   qhat <- as.numeric(stats::quantile(
-    u, probs = 0.5, type = 7, names = FALSE, na.rm = TRUE
+    u, probs = 0.5, type = 2, names = FALSE, na.rm = TRUE
   ))
   resid_tau <- y - (yhat_loc + qhat * denom)
   
-  if (scale_adj_rlm) {
+  if (adj_rlm) {
     s <- median(abs(resid_tau))/0.6745
   } else {
     df_initial <- fixest::degrees_freedom(fit_loc, type = "resid") 
@@ -184,7 +167,7 @@ lad_mm_ms <- function(
     pprob <- (2 * n - df_initial) / (2 * n)
     s <- as.numeric(
       stats::quantile(
-        abs(resid_tau), probs = pprob, type = 7, names = FALSE, na.rm = TRUE)
+        abs(resid_tau), probs = pprob, type = 2, names = FALSE, na.rm = TRUE)
     ) / stats::qnorm(0.75)
   }
 
@@ -208,7 +191,7 @@ lad_mm_ms <- function(
 # ------------------------------------------------------------------------------
 
 lad_mm_rsc <- function(
-  fml, data, scale_adj_rlm = FALSE, warn = TRUE, notes = TRUE
+  fml, data, adj_rlm = FALSE, warn = TRUE, notes = TRUE
 ) {
   # --- Estimate location ------------------------------------------------------
   # User receives the side effect messages of the first stage by default
@@ -232,11 +215,11 @@ lad_mm_rsc <- function(
 
   u <- e / denom
   qhat <- as.numeric(stats::quantile(
-    u, probs = 0.5, type = 7, names = FALSE, na.rm = TRUE
+    u, probs = 0.5, type = 2, names = FALSE, na.rm = TRUE
   ))
   resid_tau <- y - (yhat_loc + qhat * denom)
   
-  if (scale_adj_rlm) {
+  if (adj_rlm) {
     s <- median(abs(resid_tau))/0.6745
   } else {
     df_initial <- fixest::degrees_freedom(fit_loc, type = "resid") 
@@ -244,7 +227,7 @@ lad_mm_rsc <- function(
     pprob <- (2 * n - df_initial) / (2 * n)
     s <- as.numeric(
       stats::quantile(
-        abs(resid_tau), probs = pprob, type = 7, names = FALSE, na.rm = TRUE)
+        abs(resid_tau), probs = pprob, type = 2, names = FALSE, na.rm = TRUE)
     ) / stats::qnorm(0.75)
   }
 
@@ -298,12 +281,18 @@ lad_mm_rsc <- function(
 #' @param scale_update Should the scale estimate be updated in every IRLS step?
 #'  Defaults to `FALSE` like Stata's `robreg`. Set to `TRUE` to get closer to
 #'  `MASS::rlm()` behavior.
-#' @param scale_adj_rlm Whether or not the scale estimates should be 
-#'  calculated by `median(abs(resid_tau))/0.6745` as done by `MASS::rlm()` 
-#'  or by a function that factors in the degrees of freedom (the default).  
 #' @param efficiency Target normal-efficiency in (0.68, 1). Default is 0.95.
+#' @param k Huber Loss function parameter. If `NULL` (the default), it will be
+#'   determined by the `efficiency` parameter. If set, it will over-rule the 
+#'   `efficiency` parameter.
 #' @param tol Convergence tolerance on relative coefficient change.
 #' @param max_iter Maximum IRLS iterations.
+#' @param adj_rlm Whether or not the algorithm should be adjusted to be closer
+#'  ro `MASS::rlm()`. Setting this to `TRUE` implies 
+#'  - scale estimates to be calculated by `median(abs(resid_tau))/0.6745` 
+#'    instead by a function that factors in the degrees of freedom, and
+#'  - the convergence criterion to be based on residuals instead of parameter
+#'    changes.
 #' @param vcov Variance–covariance specification. Either \code{"iid"}, 
 #'  \code{"hetero"}, \code{"cluster"}, \code{"twoway"} or a formula 
 #'  such as \code{~ id} or  \code{cluster ~ id + time}. 
@@ -326,8 +315,8 @@ lad_mm_rsc <- function(
 #' fixed effects. This approach generates coefficient and standard error 
 #' estimates that are very close to either `MASS::rlm()` or Stata's `robreg  m`.
 #' By default, `ferols()` mimics the algorithm of `robreg`. To generate
-#' estimates that are closer to `MASS::rlm()` use a call like 
-#' `ferols(fml, data, vcov = "iid", scale_est = "ols", scale_adj_rlm = TRUE, scale_update = TRUE, tol = 1e-4)`.
+#' estimates that are identical to `MASS::rlm()` use a call like 
+#' `ferols(fml, data, k = 1.345, scale_est = "ols", adj_rlm = TRUE, scale_update = TRUE, tol = 1e-4, vcov = "iid")`.
 #' 
 #' By default, `ferols()` relays the messages and warnings from the initial 
 #' location as well as the final IRLS estimation to the user. This behavior can
@@ -352,9 +341,6 @@ lad_mm_rsc <- function(
 #'     final estimation step. These weights are informative as they identify 
 #'     the 'bulk of the data' that remains influential for the robust regression
 #'     estimates.
-#'   - `phi`: The derivative of the Huber score function evaluated at the 
-#'     final residuals. It is an indicator vector equal to 1 for scaled 
-#'     residuals inside the Huber threshold `k` and 0 for observations outside.
 #'
 #' @examples
 #' df <- generate_panel_data(n_units = 50, n_time = 10, seed = 42)
@@ -363,9 +349,9 @@ lad_mm_rsc <- function(
 #' 
 #' @export
 ferols <- function(
-    fml, data, family = "huber",  efficiency = 0.95, 
-    scale_est = NULL, scale = NULL, scale_update = FALSE, scale_adj_rlm = FALSE,
-    tol = 1e-10, max_iter = 200, 
+    fml, data, family = "huber",  efficiency = 0.95, k = NULL,
+    scale_est = NULL, scale = NULL, scale_update = FALSE, 
+    tol = 1e-10, max_iter = 200, adj_rlm = FALSE,
     vcov = NULL, ssc = NULL, cluster = NULL, se = NULL, ...
 ) {
   if (!requireNamespace("fixest", quietly = TRUE)) {
@@ -411,22 +397,22 @@ ferols <- function(
     fit <- fixest::feols(fml, data = data, ...)
     r <- stats::residuals(fit, na.rm = FALSE)
     if (is.null(scale)) {
-      if (scale_adj_rlm) scale <- median(abs(r))/0.6745
+      if (adj_rlm) scale <- median(abs(r))/0.6745
       else scale <- madn(r)      
     }
     beta_old <- stats::coef(fit)
   } else if (scale_est == "lad_rq") {
-    brs <- lad_rq(fml, data, scale_adj_rlm)
+    brs <- lad_rq(fml, data, adj_rlm)
     r <- brs$r
     if (is.null(scale)) scale <- brs$s
     beta_old <- brs$b
   } else if (scale_est == "lad_mm_rsc") {
-    brs <- lad_mm_rsc(fml, data, scale_adj_rlm, warn = warn, notes = notes)
+    brs <- lad_mm_rsc(fml, data, adj_rlm, warn = warn, notes = notes)
     r <- brs$r
     if (is.null(scale)) scale <- brs$s
     beta_old <- brs$b
   } else if (scale_est == "lad_mm_ms") {
-    brs <- lad_mm_ms(fml, data, scale_adj_rlm, warn = warn, notes = notes)
+    brs <- lad_mm_ms(fml, data, adj_rlm, warn = warn, notes = notes)
     r <- brs$r
     if (is.null(scale)) scale <- brs$s
     beta_old <- brs$b
@@ -446,10 +432,8 @@ ferols <- function(
     scale
   ))
 
-  k <- huber_k_from_eff(efficiency)
-  z <- r / scale
-  w <- huber_w(z, k)
-  phi <- huber_phi(z, k)
+  r_old <- r
+  if (is.null(k)) k <- huber_k_from_eff(efficiency)
   
   # --- IRLS loop --------------------------------------------------------------
   converged <- FALSE
@@ -457,35 +441,33 @@ ferols <- function(
   
   for (it in seq_len(max_iter)) {
     iter_done <- it
+    z <- r_old / scale
+    w <- huber_w(z, k)
     res_feols <- capture_side_effects(fixest::feols(
       fml, data = data, weights = w, ...
     ))
-    fit_new <- res_feols$value 
-    
-    beta_new <- stats::coef(fit_new)
+    fit <- res_feols$value 
+    beta_new <- stats::coef(fit)
     if (anyNA(beta_new)) stop(
       "IRLS produced NA coefficients; check collinearity/data issues."
     )
+    r_new <- stats::residuals(fit, na.rm = FALSE)
     
-    # relative max change
-    diff <- max(abs(beta_new - beta_old) / pmax(1, abs(beta_old)))
+    # Convergence check
+    if (adj_rlm) diff <- sqrt(sum((r_old - r_new)^2) / max(1e-20, sum(r_old^2)))
+    else diff <- max(abs(beta_new - beta_old) / pmax(1, abs(beta_old)))
     if (diff <= tol) {
-      fit <- fit_new
       converged <- TRUE
       break
     }
     
-    fit <- fit_new
-    beta_old <- beta_new
-    
-    r <- stats::residuals(fit, na.rm = FALSE)
     if (scale_update) {
-      if (scale_adj_rlm) scale <- median(abs(r))/0.6745
-      else scale <- madn(r)
+      if (adj_rlm) scale <- median(abs(r_new))/0.6745
+      else scale <- madn(r_new)
     }
-    z <- r / scale
-    w <- huber_w(z, k)
-    phi <- huber_phi(z, k)
+
+    beta_old <- beta_new
+    r_old <- r_new
   }
   
   relay_side_effects(res_feols)
@@ -502,8 +484,7 @@ ferols <- function(
     scale = scale,
     converged = converged,
     iter = iter_done,
-    weights = w,
-    phi = phi
+    weights = w
   )
   
   fit$call <- match.call()             
@@ -649,16 +630,16 @@ vcov.ferols <- function(
   z   <- r / sc
   psi <- huber_psi(z, k) 
   phi <- huber_phi(z, k)
-  Xr <- if (!is.null(fe_df)) {
-    fixest::demean(X, f = fe_df, weights = phi, na.rm = TRUE) 
-  } else X
-  S <- Xr * psi
   
   if (vcov == "iid") {
     # We are on our own. Calculating MASS::rlm() model-type standard errors
+    Xr <- if (!is.null(fe_df)) {
+      fixest::demean(X, f = fe_df, na.rm = TRUE) 
+    } else X
+    
     w   <- huber_w(z, k)
     n <- nrow(Xr)
-    p <- ncol(Xr)
+    p <- fixest::degrees_freedom(object, type = "k")
     rdf <- n - p
       
     # summary.rlm does: S = sum((wresid*w)^2)/rdf, w = psi(wresid/s)
@@ -674,6 +655,11 @@ vcov.ferols <- function(
     rownames(V) <- colnames(Xr)
     attr(V, "type") <- paste0("IID model-based")
   } else {
+    Xr <- if (!is.null(fe_df)) {
+      fixest::demean(X, f = fe_df, weights = phi, na.rm = TRUE) 
+    } else X
+    S <- Xr * psi
+    
     # Inject bread and scale and then relate to vcov.fixest()
     # bread: scale * (Xr' Phi Xr)^(-1)
     XtPhiX_inv <- solve(crossprod(Xr * as.numeric(phi), Xr))

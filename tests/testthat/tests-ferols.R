@@ -88,6 +88,13 @@ test_that("efficiency 0.7 runs", {
   expect_s3_class(fit, "ferols")
 })
 
+test_that("k parameter is obeyed", {
+  my_k <- 0.529
+  fit <- ferols(y ~ x | i + t, data = test_df, vcov = ~ i, k = my_k)
+  expect_s3_class(fit, "ferols")
+  expect_equal(fit$robust$k, my_k)
+})
+
 test_that("scale_est='ols' yields an estimate", {
   expect_no_warning(
     fit <- ferols(y ~ x, data = test_df, scale_est = "ols")
@@ -187,7 +194,7 @@ test_that("data.save = TRUE allows vcov after data removal", {
   expect_true(all(dim(V) > 0))
 })
 
-test_that("scale parameter is obeyed.", {
+test_that("scale parameter is obeyed", {
   out <- cap(
     ferols(y ~ x | i + t, vcov = ~ i, scale = 0.987, data = test_df)
   )
@@ -232,11 +239,11 @@ test_that(
     "'lad_mm_rsc' with clustering returns scale, parameter estimates and SEs", 
     "that are virtually identical to those of Stata's robreg m" 
   ), {
-    test_tol <- 1e-4
-    robreg_scale <- 0.668803236125195
-    robreg_x <- 1.0029391
-    robreg_se <- sqrt(0.00004447)
-    fit <- ferols(y ~ x + z | i + t, data = test_df, vcov = ~i)
+    test_tol <- testthat_tolerance()
+    robreg_scale <- 0.6688032361251953217
+    robreg_x <- 1.002939067181493948
+    robreg_se <- 0.0066684561253234379
+    fit <- ferols(y ~ x + z | i + t, data = test_df, k = 1.3449975, vcov = ~i)
     expect_equal(
       fit$robust$scale, robreg_scale, tolerance = test_tol, ignore_attr = TRUE
     )
@@ -247,11 +254,11 @@ test_that(
       fit$se[1], robreg_se, tolerance = test_tol, ignore_attr = TRUE
     )
 
-    robreg_scale <- 0.6909039341817896
-    robreg_x <- 1.0033825
-    robreg_se <- sqrt(0.00007045)
+    robreg_scale <- 0.6909039341817896362
+    robreg_x <- 1.003382505812653092
+    robreg_se <- 0.0083934822284574447
     fitm <- ferols(
-      y ~ x + z | i + t, data = test_df_missing, vcov = ~i, 
+      y ~ x + z | i + t, data = test_df_missing, k = 1.3449975, vcov = ~i, 
       notes = FALSE
     )
     expect_equal(
@@ -264,10 +271,10 @@ test_that(
       fitm$se[1], robreg_se, tolerance = test_tol, ignore_attr = TRUE
     )
     
-    robreg_scale <- 0.79386884
-    robreg_x <- 1.005568
-    robreg_se <- 0.0079762
-    fit0 <- ferols(y ~ x + z, data = test_df)
+    robreg_scale <- 0.7938688438352101695
+    robreg_x <- 1.005567623774237029
+    robreg_se <- 0.007976196689564629
+    fit0 <- ferols(y ~ x + z, data = test_df, k = 1.3449975)
     expect_equal(
       fit0$robust$scale, robreg_scale, tolerance = test_tol, ignore_attr = TRUE
     )
@@ -284,11 +291,11 @@ test_that(paste(
   "ferols() without fixed effets returns scale, cpefficient and SEs estimates",
   "that are virtually identical to those of MASS::rlm()"
   ), {
-    test_tol = 1e-4
+    test_tol = testthat_tolerance() # 1.490116e-08
     fit_rlm <- MASS::rlm(y ~ x + z, test_df)
     fit_ferols <- ferols(
-      y ~ x + z, test_df, vcov = "iid", scale_est = "ols", scale_adj_rlm = TRUE, 
-      scale_update = TRUE, tol = 1e-4
+      y ~ x + z, test_df, k = 1.345, scale_est = "ols", adj_rlm = TRUE, 
+      scale_update = TRUE, tol = 1e-4, vcov = "iid"
     )
     expect_equal(
       fit_rlm$s, fit_ferols$robust$scale, 
