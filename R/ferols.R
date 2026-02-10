@@ -38,7 +38,7 @@ relay_side_effects <- function(x) {
   for (w in x$warnings) warning(w, call. = FALSE)
 }
 
-huber_k_from_eff <- function(eff_target) {
+huber_k_from_eff <- function(eff_target, tol = 1e-12) {
   eff_fun <- function(k) {
     # Asymptotic efficiency of Huber M-estimator under N(0,1) relative to OLS
     # See Page 27 in Maronna et al. Robust Statistics 
@@ -46,7 +46,10 @@ huber_k_from_eff <- function(eff_target) {
     N <- (pnorm(k) - pnorm(-k))^2
     N/D
   }
-  stats::uniroot(function(k) eff_fun(k) - eff_target, lower = 0.1, upper = 10)$root
+  stats::uniroot(
+    function(k) eff_fun(k) - eff_target, 
+    lower = 0.0001, upper = 10, tol = 1e-12
+  )$root
 }
 
 huber_psi <- function(z, k) ifelse(abs(z) <= k, z, k * sign(z))

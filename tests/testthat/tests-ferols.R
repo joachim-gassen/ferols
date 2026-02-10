@@ -243,7 +243,7 @@ test_that(
     robreg_scale <- 0.6688032361251953217
     robreg_x <- 1.002939067181493948
     robreg_se <- 0.0066684561253234379
-    fit <- ferols(y ~ x + z | i + t, data = test_df, k = 1.3449975, vcov = ~i)
+    fit <- ferols(y ~ x + z | i + t, data = test_df, vcov = ~i)
     expect_equal(
       fit$robust$scale, robreg_scale, tolerance = test_tol, ignore_attr = TRUE
     )
@@ -258,7 +258,7 @@ test_that(
     robreg_x <- 1.003382505812653092
     robreg_se <- 0.0083934822284574447
     fitm <- ferols(
-      y ~ x + z | i + t, data = test_df_missing, k = 1.3449975, vcov = ~i, 
+      y ~ x + z | i + t, data = test_df_missing, vcov = ~i, 
       notes = FALSE
     )
     expect_equal(
@@ -274,7 +274,7 @@ test_that(
     robreg_scale <- 0.7938688438352101695
     robreg_x <- 1.005567623774237029
     robreg_se <- 0.007976196689564629
-    fit0 <- ferols(y ~ x + z, data = test_df, k = 1.3449975)
+    fit0 <- ferols(y ~ x + z, data = test_df)
     expect_equal(
       fit0$robust$scale, robreg_scale, tolerance = test_tol, ignore_attr = TRUE
     )

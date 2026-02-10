@@ -113,7 +113,7 @@ if (BMARK_ROBREG) {
     RUNS, run_ests(
       ferols_fml = y ~ x + z | i + t, 
       robreg_do_file = "utils/run_robreg.do",
-      ferols_parms = list(vcov = ~i, k = 1.3449975, data.save = TRUE)
+      ferols_parms = list(vcov = ~i, data.save = TRUE)
     ), simplify = FALSE  
   ))
 }
