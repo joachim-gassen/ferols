@@ -1,12 +1,13 @@
-# ferols: A Fixed-Effects Robust M Estimator with Huber Loss
+# ferols: A Robust M-Estimator with Huber Loss for Fixed-Effect Models
 
 
-**ferols** implements a fixed-effects robust linear regression estimator
-using **Huber M-estimation** with **iteratively reweighted least squares
-(IRLS)**. It is inspired by the [package `robtwfe` by David
-Veenman](https://github.com/dveenman/robtwfe). and designed to integrate
-tightly with the [`fixest`](https://lrberge.github.io/fixest/)
-ecosystem.
+The R package `ferols` implements a robust M-Estimator for linear models
+with high-dimensional fixed effects. It uses a Huber loss function and
+iteratively reweighted least squares (IRLS) and is inspired by the
+[package `robtwfe` by David
+Veenman](https://github.com/dveenman/robtwfe). Its user interface is
+designed to integrate tightly with the
+[`fixest`](https://lrberge.github.io/fixest/) ecosystem.
 
 It builds on our recent work
 
@@ -66,7 +67,7 @@ term that has high kurtosis by default. The modeled data generating
 process is as follows
 
 $$
-y_{it} = \alpha_i + \lambda_t + x_{it}\beta + z_{it}\gamma + e_{it}
+y_{it} = \alpha_i + \lambda_t + \beta x_{it} + \gamma z_{it} + e_{it}
 $$
 
 where $\alpha_i$ and $\lambda_t$ are unit and time fixed effects,
