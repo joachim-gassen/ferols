@@ -216,6 +216,12 @@ test_that("estimation passes on data with missing values", {
     data = test_df_missing, notes = FALSE
   )
   expect_s3_class(fit, "ferols")
+  fit <- ferols(
+    y ~ x + z, data = test_df_missing, 
+    k = 1.345, scale_est = "ols", adj_rlm = TRUE, 
+    scale_update = TRUE, tol = 1e-4, vcov = "iid", notes = FALSE
+  )
+  expect_s3_class(fit, "ferols")
 })
 
 test_that(

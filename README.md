@@ -1,10 +1,9 @@
 # ferols: A Fixed-Effects Robust M Estimator with Huber Loss
 
 
-**ferols** provides an experimental implementation for a fixed-effects
-linear regression estimator using **Huber M-estimation** with
-**iteratively reweighted least squares (IRLS)**. It is inspired by the
-[package `robtwfe` by David
+**ferols** implements a fixed-effects robust linear regression estimator
+using **Huber M-estimation** with **iteratively reweighted least squares
+(IRLS)**. It is inspired by the [package `robtwfe` by David
 Veenman](https://github.com/dveenman/robtwfe). and designed to integrate
 tightly with the [`fixest`](https://lrberge.github.io/fixest/)
 ecosystem.
@@ -129,12 +128,12 @@ ferols(y ~ x + z | i + t, data = df, vcov = ~ i)
     Fixed-effects: i: 1,000,  t: 10
     Standard-errors: Clustered (i) 
       Estimate Std. Error   t value  Pr(>|t|)    
-    x 1.003965   0.007369 136.24568 < 2.2e-16 ***
+    x 1.003965   0.007369 136.24598 < 2.2e-16 ***
     z 0.012563   0.007349   1.70941  0.087409 .  
     ---
     Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
-    RMSE: 0.900111     Adj. R2: 0.575471
-                     Within R2: 0.530222
+    RMSE: 0.900109     Adj. R2: 0.575472
+                     Within R2: 0.530223
 
 ``` r
 # For comparison: OLS has higher standard errors

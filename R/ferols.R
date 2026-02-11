@@ -400,7 +400,7 @@ ferols <- function(
     fit <- fixest::feols(fml, data = data, ...)
     r <- stats::residuals(fit, na.rm = FALSE)
     if (is.null(scale)) {
-      if (adj_rlm) scale <- median(abs(r))/0.6745
+      if (adj_rlm) scale <- median(abs(r), na.rm = TRUE)/0.6745
       else scale <- madn(r)      
     }
     beta_old <- stats::coef(fit)
@@ -457,7 +457,10 @@ ferols <- function(
     r_new <- stats::residuals(fit, na.rm = FALSE)
     
     # Convergence check
-    if (adj_rlm) diff <- sqrt(sum((r_old - r_new)^2) / max(1e-20, sum(r_old^2)))
+    if (adj_rlm) diff <- sqrt(
+      sum((r_old - r_new)^2, na.rm = TRUE) / 
+        max(1e-20, sum(r_old^2, na.rm = TRUE))
+    )
     else diff <- max(abs(beta_new - beta_old) / pmax(1, abs(beta_old)))
     if (diff <= tol) {
       converged <- TRUE
@@ -465,7 +468,7 @@ ferols <- function(
     }
     
     if (scale_update) {
-      if (adj_rlm) scale <- median(abs(r_new))/0.6745
+      if (adj_rlm) scale <- median(abs(r_new), na.rm = TRUE)/0.6745
       else scale <- madn(r_new)
     }
 

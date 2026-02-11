@@ -3,7 +3,7 @@ title: "ferols: A Fixed-Effects Robust M Estimator with Huber Loss"
 format: gfm
 ---
 
-**ferols** provides an experimental implementation for a fixed-effects linear 
+**ferols** implements a fixed-effects robust linear 
 regression estimator using **Huber M-estimation** with 
 **iteratively reweighted least squares (IRLS)**. It is inspired by 
 the [package `robtwfe` by David Veenman](https://github.com/dveenman/robtwfe). 
