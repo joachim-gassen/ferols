@@ -9,6 +9,6 @@ timer off 1
 timer list 1
 scalar run_time = r(t1)
 
-file write tsv "run_time" _tab "est" _tab "se" _n
-file write tsv %21.0g (run_time) _tab %21.0g (_b[x]) _tab %21.0g (_se[x]) _n
+file write tsv "run_time" _tab "est" _tab "se" _tab "scale" _n
+file write tsv %21.0g (run_time) _tab %21.0g (_b[x]) _tab %21.0g (_se[x]) _tab %21.0g (e(scale)) _n
 file close tsv

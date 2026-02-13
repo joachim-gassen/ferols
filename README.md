@@ -194,7 +194,54 @@ legend(
 <img src="README_files/figure-commonmark/exp2-1.png"
 data-fig-align="center" />
 
+## Benchmarking `ferols` with other R and Stata packages for Robust M-Estimation
+
+`ferols` produces coefficient, standard error, and scale estimates that
+are identical within numerical precision to the ones created by packages
+that do not aborb fixed effects (`MASS::rlm()`)[^1], that absorb one
+dimension of fixed effects (Stata’s `robreg`) and that absorb fixed
+effects accross two dimensions (Stata’s `robtwfe`). Summary statistics
+of the relative differences of `ferols`’s estimates to these alternative
+packages ($rd_{est,package}$)
+
+$$
+rd_{est,package}  = \frac{est_{ferols} - est_{package}}{est_{package}}
+$$
+
+based on 500 runs on independent randome samples created by
+`generate_panel_data()`[^2] are presented in the table below.
+
+| Package | Estimate | Minimum(rd) | Maximum(rd) | Mean(\|rd\|) |
+|:--------|:---------|------------:|------------:|-------------:|
+| rlm     | coef     |    -7.6e-13 |     9.1e-13 |      7.2e-14 |
+| rlm     | se       |    -1.2e-10 |     1.0e-10 |      9.8e-12 |
+| rlm     | scale    |    -2.3e-10 |     2.0e-10 |      1.9e-11 |
+| robreg  | coef     |    -2.0e-10 |     3.5e-10 |      4.2e-11 |
+| robreg  | se       |    -9.1e-10 |    -2.5e-10 |      4.9e-10 |
+| robreg  | scale    |    -5.0e-13 |     4.0e-13 |      8.8e-14 |
+| robtwfe | coef     |    -1.6e-10 |     2.4e-10 |      2.7e-11 |
+| robtwfe | se       |    -3.8e-09 |     2.7e-09 |      1.1e-09 |
+| robtwfe | scale    |    -4.8e-14 |     4.0e-14 |      7.4e-15 |
+
+The processing times can be compared by the following table (notice the
+speed gain relative to `MASS::rlm()`, which has to estimate the
+coefficients and SEs for 1,009 fixed effects).
+
+| Package | Mean \[secs\] | Low CI \[secs\] | High CI \[secs\] |
+|:--------|--------------:|----------------:|-----------------:|
+| ferols  |         0.168 |           0.166 |            0.171 |
+| robreg  |         0.752 |           0.747 |            0.756 |
+| robtwfe |         1.243 |           1.236 |            1.250 |
+| rlm     |        37.587 |          37.282 |           37.893 |
+
 ## Not yet implemented (sorted by priority)
 
 - Alternative loss functions
 - Weighted regressions
+
+[^1]: To mimic the algorithm used by `MASS::rlm()`, `ferols` is called
+    with the parameters
+    `k = 1.345,  scale_est = "ols", adj_rlm = TRUE, scale_update = TRUE, tol = 1e-4,  vcov = "iid"`.
+
+[^2]: The code to create the benchmark data is at
+    `utils/compare_ests.R`.
