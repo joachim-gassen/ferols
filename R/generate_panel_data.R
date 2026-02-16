@@ -13,17 +13,19 @@
 #' 
 #' @description 
 #' Generates a data frame containing simulated panel data for testing the
-#' \code{ferols()} function. The data contains observations with a unit and 
-#' time dimensions with clustered errors drawn from mixed distributions.
+#' \code{ferols()} function. The data contains observations with unit and 
+#' time dimensions and two-way clustered composite errors drawn from a mixed 
+#' distribution.
 #' @param n_units Integer. Number of cross-sectional units. Default is 1000.
 #' @param n_time Integer. Number of time periods. Default is 10.
-#' @param e_mult Numeric. Multiplier for the error term to. This can be used to
-#' kurtosis in the error distribution. Default is 3.
+#' @param e_mult Numeric. Multiplier to set the kurtosis fo the composite error. 
+#' `e_share` of the composite error will be multiplied by `e_mult`. 
+#' Default is 3, resulting in mild kurtosis of the composite error.
 #' @param e_share Numeric. Share of observations affected by the error 
 #' multiplier. Default is 0.1.
-#' @param share_missing Numeric. Percentage of missing data to introduce into the
-#' panel. Default is 0 (no missing data, balanced panel). Needs to be between 0 and
-#' small than 1.
+#' @param share_missing Numeric. Percentage of missing data to introduce into 
+#' the panel. Default is 0 (no missing data, balanced panel). Needs to be 
+#' between 0 and smaller than 1.
 #' @param mean_u Numeric. Mean of the unit-level random effects. Default is 0.
 #' @param sigma_u Numeric. Standard deviation of the unit-level random effects.
 #' Default is 1/3.
@@ -35,19 +37,18 @@
 #' @param rho_t Numeric. Time-specific autocorrelation coefficient for the 
 #' error term. Default is 0.5.
 #' @param sigma_e Numeric. Standard deviation of the idiosyncratic noise 
-#' component.
-#' Default is 1 - sigma_u - sigma_t.
+#' component. Default is 1 - sigma_u - sigma_t.
 #' @param beta Numeric. Coefficient for the independent variable x. Default is 1.
 #' @param mu_x Numeric. Mean of the independent variable x. Default is 0.
 #' @param sigma_x Numeric. Standard deviation of the independent variable x.
 #' Default is 1.
 #' @param n_z Integer. Number of control variables z to include. Default is 1.
-#' @param beta_z Numeric vector. Coefficients for the control variable(s) z. Default
-#' is 0 (no effect). Needs to be of length `n_z`.
-#' @param mu_z Numeric. Mean of the control variable(s) z. Default is 0. Needs to
-#' be of length `n_z`.
-#' @param sigma_z Numeric. Standard deviation of the control variable(s) z. 
-#' Default is 1. Needs to be of length `n_z`.
+#' @param beta_z Numeric vector. Coefficients for the control variable(s) z. 
+#' Default is 0 (no effect). Needs to be of length `n_z`.
+#' @param mu_z Numeric vector. Mean of the control variable(s) z. Default is 0. 
+#' Needs to be of length `n_z`.
+#' @param sigma_z Numeric vector. Standard deviation of the control 
+#' variable(s) z. Default is 1. Needs to be of length `n_z`.
 #' @param seed Integer. Random seed for reproducibility.
 #' 
 #' @return A data frame containing the simulated panel data.
