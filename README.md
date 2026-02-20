@@ -219,9 +219,9 @@ based on 500 runs on independent randome samples created by
 | robreg  | coef     |    -2.0e-10 |     3.5e-10 |      4.2e-11 |
 | robreg  | se       |    -9.1e-10 |    -2.5e-10 |      4.9e-10 |
 | robreg  | scale    |    -5.0e-13 |     4.0e-13 |      8.8e-14 |
-| robtwfe | coef     |    -1.6e-10 |     2.4e-10 |      2.7e-11 |
-| robtwfe | se       |    -3.8e-09 |     2.7e-09 |      1.1e-09 |
-| robtwfe | scale    |    -4.8e-14 |     4.0e-14 |      7.4e-15 |
+| robtwfe | coef     |    -1.2e-10 |     1.2e-10 |      2.6e-11 |
+| robtwfe | se       |    -4.7e-09 |     2.4e-09 |      1.0e-09 |
+| robtwfe | scale    |    -5.6e-14 |     8.6e-14 |      1.1e-14 |
 
 The processing times can be compared by the following table (notice the
 speed gain relative to `MASS::rlm()`, which has to estimate the
@@ -231,7 +231,7 @@ coefficients and SEs for 1,009 fixed effects).
 |:--------|--------------:|----------------:|-----------------:|
 | ferols  |         0.168 |           0.166 |            0.171 |
 | robreg  |         0.752 |           0.747 |            0.756 |
-| robtwfe |         1.243 |           1.236 |            1.250 |
+| robtwfe |         1.206 |           1.198 |            1.213 |
 | rlm     |        37.587 |          37.282 |           37.893 |
 
 ## Not yet implemented (sorted by priority)
