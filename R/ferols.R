@@ -115,7 +115,8 @@ lad_rq <- function(fml, data, adj_rlm = FALSE) {
 # ------------------------------------------------------------------------------
 
 lad_mm_ms <- function(
-    fml, data, adj_rlm = FALSE, warn = TRUE, notes = TRUE
+  fml, data, adj_rlm = FALSE, fixef.rm = "perfect_fit", 
+  warn = TRUE, notes = TRUE
 ) {
   fml_split <- fixest:::fml_split(fml, raw = TRUE)
   if (length(fml_split) == 2) {
@@ -138,7 +139,9 @@ lad_mm_ms <- function(
   
   # --- Estimate location ------------------------------------------------------
   # User receives the side effect messages of the first stage by default
-  fit_loc <- fixest::feols(fml_loc, data, warn = warn, notes = notes)
+  fit_loc <- fixest::feols(
+    fml_loc, data, fixef.rm = fixef.rm, warn = warn, notes = notes
+  )
   yhat_loc <- as.numeric(stats::fitted(fit_loc, na.rm = FALSE))
   y <- as.numeric(data[, as.character(fml[[2]]), drop = TRUE])
   e <- y - yhat_loc
@@ -149,7 +152,9 @@ lad_mm_ms <- function(
   # --- Estimate scale ---------------------------------------------------------
   fml_scl <- fml_loc
   fml_scl[[2]] <- substitute(r_raw)
-  fit_scl <- fixest::feols(fml_scl, data, warn = FALSE, notes = FALSE)
+  fit_scl <- fixest::feols(
+    fml_scl, data, fixef.rm = fixef.rm,warn = FALSE, notes = FALSE
+  )
   denom <- as.numeric(stats::fitted(fit_scl, na.rm = FALSE))
   
   # Avoiding numerical issues causing scale estimates to become zero 
@@ -195,11 +200,14 @@ lad_mm_ms <- function(
 # ------------------------------------------------------------------------------
 
 lad_mm_rsc <- function(
-  fml, data, adj_rlm = FALSE, warn = TRUE, notes = TRUE
+  fml, data, adj_rlm = FALSE, fixef.rm = "perfect_fit", 
+  warn = TRUE, notes = TRUE
 ) {
   # --- Estimate location ------------------------------------------------------
   # User receives the side effect messages of the first stage by default
-  fit_loc <- fixest::feols(fml, data, warn = warn, notes = notes)
+  fit_loc <- fixest::feols(
+    fml, data, warn = warn, notes = notes, fixef.rm = fixef.rm
+  )
   yhat_loc <- as.numeric(stats::fitted(fit_loc, na.rm = FALSE))
   y <- as.numeric(data[, as.character(fml[[2]]), drop = TRUE])
   e <- y - yhat_loc
@@ -210,7 +218,9 @@ lad_mm_rsc <- function(
   # --- Estimate scale ---------------------------------------------------------
   fml_scl <- fml
   fml_scl[[2]] <- substitute(r_raw)
-  fit_scl <- fixest::feols(fml_scl, data, warn = FALSE, notes = FALSE)
+  fit_scl <- fixest::feols(
+    fml_scl, data, warn = FALSE, notes = FALSE, fixef.rm = fixef.rm
+  )
   denom <- as.numeric(stats::fitted(fit_scl, na.rm = FALSE))
   
   # Avoiding numerical issues causing scale estimates to become zero 
@@ -297,6 +307,10 @@ lad_mm_rsc <- function(
 #'    instead by a function that factors in the degrees of freedom, and
 #'  - the convergence criterion to be based on residuals instead of parameter
 #'    changes.
+#' @param rm_singletons Whether singletons should be removed when estimating 
+#'    inintial coefficients and scale as well as during IRLS steps. Defaults to
+#'    `TRUE` (`fixest::feols()`  default). Set to `FALSE` to mimic the current
+#'    behavior of Stata's `robtwfe`.
 #' @param vcov Variance–covariance specification. Either \code{"iid"}, 
 #'  \code{"hetero"}, \code{"cluster"}, \code{"twoway"} or a formula 
 #'  such as \code{~ id} or  \code{cluster ~ id + time}. 
@@ -308,9 +322,11 @@ lad_mm_rsc <- function(
 #' @param se (deprecated) A string ("standard", or "cluster") to indicated how
 #'  the standard errors should be calculated. Note that this argument is 
 #'  deprecated, you should use `vcov` instead.
-#' @param ... Further arguments passed to `fixest::feols`. The `weights` 
-#'  argument cannot be used as it is set by the IRLS process and regression
-#'  weights are not implemented by `ferols()`.
+#' @param ... Further arguments passed to `fixest::feols`. The `weights` and
+#' `fixef.rm` arguments cannot be used as 
+#'  - `weight` is set by the IRLS process and regression weights are not 
+#'    implemented yet by `ferols()`, and
+#'  - `fixef.rm` is controlled by `rm_singletons`.
 #'
 #' @details
 #' `ferols()` implements an IRLS process based on initial location and scale
@@ -355,7 +371,7 @@ lad_mm_rsc <- function(
 ferols <- function(
     fml, data, family = "huber",  efficiency = 0.95, k = NULL,
     scale_est = NULL, scale = NULL, scale_update = FALSE, 
-    tol = 1e-10, max_iter = 200, adj_rlm = FALSE,
+    tol = 1e-10, max_iter = 200, adj_rlm = FALSE, rm_singletons = TRUE,
     vcov = NULL, ssc = NULL, cluster = NULL, se = NULL, ...
 ) {
   if (!requireNamespace("fixest", quietly = TRUE)) {
@@ -368,6 +384,12 @@ ferols <- function(
   if ("notes" %in% names(dots)) notes <- dots$notes else notes <- TRUE
   if ("weights" %in% dots) {
     stop("Argument 'weights' is not supported by 'ferols()'.")
+  }
+  if ("fixef.rm" %in% dots) {
+    stop(paste(
+      "The exclusion of singletons is controlled by the 'rm_singletons'", 
+      "argument."
+    ))
   }
   
   if (!is.character(family) || family != "huber") {
@@ -393,12 +415,13 @@ ferols <- function(
       ), scale_est, paste(allowed_scale_ests, collapse = "', '")
     ))
   } 
+  if (rm_singletons) fixef.rm = "perfect_fit" else fixef.rm = "none"
   
   # --- Initial fit to estimate scale and starting beta ------------------------
   
   
   if (scale_est == "ols")  {
-    fit <- fixest::feols(fml, data = data, ...)
+    fit <- fixest::feols(fml, data = data, fixef.rm = fixef.rm, ...)
     r <- stats::residuals(fit, na.rm = FALSE)
     if (is.null(scale)) {
       if (adj_rlm) scale <- median(abs(r), na.rm = TRUE)/0.6745
@@ -406,17 +429,23 @@ ferols <- function(
     }
     beta_old <- stats::coef(fit)
   } else if (scale_est == "lad_rq") {
-    brs <- lad_rq(fml, data, adj_rlm)
+    brs <- lad_rq(fml, data, adj_rlm = adj_rlm)
     r <- brs$r
     if (is.null(scale)) scale <- brs$s
     beta_old <- brs$b
   } else if (scale_est == "lad_mm_rsc") {
-    brs <- lad_mm_rsc(fml, data, adj_rlm, warn = warn, notes = notes)
+    brs <- lad_mm_rsc(
+      fml, data, fixef.rm = fixef.rm, adj_rlm = adj_rlm, 
+      warn = warn, notes = notes
+    )
     r <- brs$r
     if (is.null(scale)) scale <- brs$s
     beta_old <- brs$b
   } else if (scale_est == "lad_mm_ms") {
-    brs <- lad_mm_ms(fml, data, adj_rlm, warn = warn, notes = notes)
+    brs <- lad_mm_ms(
+      fml, data, fixef.rm = fixef.rm, adj_rlm = adj_rlm,
+      warn = warn, notes = notes
+    )
     r <- brs$r
     if (is.null(scale)) scale <- brs$s
     beta_old <- brs$b
@@ -448,7 +477,7 @@ ferols <- function(
     z <- r_old / scale
     w <- huber_w(z, k)
     res_feols <- capture_side_effects(fixest::feols(
-      fml, data = data, weights = w, ...
+      fml, data = data, weights = w, fixef.rm = fixef.rm, ...
     ))
     fit <- res_feols$value 
     beta_new <- stats::coef(fit)

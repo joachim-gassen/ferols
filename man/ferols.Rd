@@ -16,6 +16,7 @@ ferols(
   tol = 1e-10,
   max_iter = 200,
   adj_rlm = FALSE,
+  rm_singletons = TRUE,
   vcov = NULL,
   ssc = NULL,
   cluster = NULL,
@@ -78,6 +79,11 @@ instead by a function that factors in the degrees of freedom, and
 changes.
 }}
 
+\item{rm_singletons}{Whether singletons should be removed when estimating
+inintial coefficients and scale as well as during IRLS steps. Defaults to
+\code{TRUE} (\code{fixest::feols()}  default). Set to \code{FALSE} to mimic the current
+behavior of Stata's \code{robtwfe}.}
+
 \item{vcov}{Variance–covariance specification. Either \code{"iid"},
 \code{"hetero"}, \code{"cluster"}, \code{"twoway"} or a formula
 such as \code{~ id} or  \code{cluster ~ id + time}.
@@ -93,9 +99,13 @@ Note that this argument is deprecated, you should use \code{vcov} instead.}
 the standard errors should be calculated. Note that this argument is
 deprecated, you should use \code{vcov} instead.}
 
-\item{...}{Further arguments passed to \code{fixest::feols}. The \code{weights}
-argument cannot be used as it is set by the IRLS process and regression
-weights are not implemented by \code{ferols()}.}
+\item{...}{Further arguments passed to \code{fixest::feols}. The \code{weights} and
+\code{fixef.rm} arguments cannot be used as
+\itemize{
+\item \code{weight} is set by the IRLS process and regression weights are not
+implemented yet by \code{ferols()}, and
+\item \code{fixef.rm} is controlled by \code{rm_singletons}.
+}}
 }
 \value{
 An object of class \verb{c("ferols", fixest")} with an additional list
