@@ -4,7 +4,7 @@ file open tsv using "temp/stata_out.tsv", write replace
 
 timer clear 1
 timer on 1
-quietly robtwfe m y x z, ivar(i) tvar(t) cluster(i) eff(95) 
+quietly robhdfe m y x z, absorb(i t) cluster(i) eff(95) 
 timer off 1
 timer list 1
 scalar run_time = r(t1)

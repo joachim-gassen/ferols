@@ -10,9 +10,9 @@ bmark_timing <- readRDS("utils/bmark_timing.rds")
 ```
 
 The R package `ferols` implements a robust M-Estimator for linear models with 
-high-dimensional fixed effects. It uses a Huber loss function and iteratively 
-reweighted least squares (IRLS) and is inspired by 
-the [package `robtwfe` by David Veenman](https://github.com/dveenman/robtwfe). 
+high-dimensional fixed effects, a Huber loss function and iteratively 
+reweighted least squares (IRLS). It is inspired by and co-developed with the  
+the [Stata package `robhdfe` by David Veenman](https://github.com/dveenman/robhdfe). 
 Its user interface is designed to integrate tightly with the
 [`fixest`](https://lrberge.github.io/fixest/) ecosystem.
 
@@ -26,9 +26,23 @@ and combines robust M-estimation (Huber loss) with:
 
 - high-dimensional fixed-effect absorption,
 - fast estimation via `fixest::feols`,
-- several algorithms to estimate scale in the first step,
 - and a `fixest` style variance–covariance interface allowing for
   clustered sandwich standard errors.
+
+For the first-step quantile regression that is used to obtain the scale 
+estimate, `ferols()` implements the MM-QR estimation from 
+[Machado and Santos Silva(2019)](https://www.sciencedirect.com/science/article/pii/S0304407619300648)
+to combine quantile estimation with fixed effects, which 
+[Rios-Avila, Siles, and Canavire-Bacarreza (2024)](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4944894)
+show can be extended to the multidimensional fixed effects setting. 
+
+`ferols()` drops singleton observations by default. This implementation choice 
+affects not only the degrees-of-freedom adjustment in the standard error 
+calculation (see [Correia 2015](https://scorreia.com/research/singletons.pdf)), 
+but in this case also ensures the scale parameter is correctly estimated with 
+the MM-QR estimation. Singleton observations produce regression residuals that 
+are equal to (or very close to) zero, causing the scale parameter to be 
+understated when singleton observations are retained.
 
 
 ## Why?
@@ -51,26 +65,27 @@ variance estimators, including clustered standard errors.
 as these provide much more flexible, tested, and rigorous implementations. 
 Rather it aims to fill a narrow gap as these packages currently do not allow
 to absorb fixed effects during estimation and might thus run in 
-performance/convergence problems in setting with many fixed effects.
+performance/memory problems in settings with many fixed effects.
 
 This package is under active development. The API, implementation details, and 
-numerical behavior may and probably will change. Use with care and 
-**do not rely on it to generate reproducible empirical results yet**.
+numerical behavior may and probably will change. Use with care.
 
 
 ## Installation (development version)
 
-`ferols` is not on CRAN. To install the current development version from GitHub:
+`ferols` is not on CRAN yet. To install the current development version from 
+GitHub:
 
 ```{r, eval=FALSE}
 install.packages("remotes")
 remotes::install_github("joachim-gassen/ferols")
 ```
 
+
 ## Function to generate test panel data
 
 For convenience, the package ships with the function `generate_panel_data()`. 
-It generates panel data with a composite  error term that has high kurtosis 
+It generates panel data with a composite error term that has high kurtosis 
 by default. The modeled data generating process is as follows
 
 $$
@@ -108,13 +123,16 @@ by a factor $m$. This produces a mixture error distribution with outliers.
 library(ferols)
 library(moments)
 df <- generate_panel_data(seed = 42, e_mult = 10)
-cat(sprintf("Kourtosis of composite error: %.2f", kurtosis(df$e)))
+cat(sprintf(
+  "True beta: 1, true gamma: 0, kurtosis of composite error: %.2f", 
+  kurtosis(df$e)
+))
 plot(
   df$x, df$y, xlab = "x", ylab = "y", 
   pch = 16, cex = 0.4, col = rgb(0, 0, 0, 0.2)
 )
 ferols(y ~ x + z | i + t, data = df, vcov = ~ i)
-# For comparison: OLS has higher standard errors
+# For comparison: OLS has less precise estimates and larger standard errors
 fixest::feols(y ~ x + z | i + t, data = df, vcov = ~ i)
 ```
 
@@ -164,15 +182,15 @@ aborb fixed effects (`MASS::rlm()`)^[To mimic the algorithm used by
 `MASS::rlm()`, `ferols` is called with the parameters `k = 1.345, 
 scale_est = "ols", adj_rlm = TRUE, scale_update = TRUE, tol = 1e-4, 
 vcov = "iid"`.], that absorb one dimension of fixed effects 
-(Stata's `robreg`) and that absorb fixed effects accross two dimensions (Stata's
-`robtwfe`). Summary statistics of the relative differences of `ferols`'s 
+(Stata's `robreg`) and that absorb high-dimensional fixed effects (Stata's
+`robhdfe`). Summary statistics of the relative differences of `ferols`'s 
 estimates to these alternative packages ($rd_{est,package}$)
 
 $$
 rd_{est,package}  = \frac{est_{ferols} - est_{package}}{est_{package}}
 $$
 
-based on `{r} unique(bmark_stats$runs)` runs on independent randome samples 
+based on `{r} unique(bmark_stats$runs)` runs on independent random samples 
 created by `generate_panel_data()`^[The code to create the benchmark data is at 
 `utils/compare_ests.R`.] are presented in the table below.
 
@@ -192,7 +210,7 @@ The processing times can be compared by the following table (notice the speed
 gain relative to `MASS::rlm()`, which has to estimate the coefficients and SEs 
 for 1,009 fixed effects).
 
-```{r TabTimind, echo=FALSE}
+```{r TabTiming, echo=FALSE}
 df <- bmark_timing[c(3, 4, 6, 2), ]
 colnames(df) <- c(
   "Package", "Mean [secs]", "Low CI [secs]", "High CI [secs]"
@@ -202,7 +220,7 @@ kable(df, align = "lrrr", digits = 3)
 ```
 
 
-## Not yet implemented (sorted by priority)
+## Not yet implemented
 
 - Alternative loss functions
 - Weighted regressions

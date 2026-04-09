@@ -2,10 +2,11 @@
 
 
 The R package `ferols` implements a robust M-Estimator for linear models
-with high-dimensional fixed effects. It uses a Huber loss function and
-iteratively reweighted least squares (IRLS) and is inspired by the
-[package `robtwfe` by David
-Veenman](https://github.com/dveenman/robtwfe). Its user interface is
+with high-dimensional fixed effects, a Huber loss function and
+iteratively reweighted least squares (IRLS). It is inspired by and
+co-developed with the  
+the [Stata package `robhdfe` by David
+Veenman](https://github.com/dveenman/robhdfe). Its user interface is
 designed to integrate tightly with the
 [`fixest`](https://lrberge.github.io/fixest/) ecosystem.
 
@@ -19,9 +20,26 @@ and combines robust M-estimation (Huber loss) with:
 
 - high-dimensional fixed-effect absorption,
 - fast estimation via `fixest::feols`,
-- several algorithms to estimate scale in the first step,
 - and a `fixest` style variance–covariance interface allowing for
   clustered sandwich standard errors.
+
+For the first-step quantile regression that is used to obtain the scale
+estimate, `ferols()` implements the MM-QR estimation from [Machado and
+Santos
+Silva(2019)](https://www.sciencedirect.com/science/article/pii/S0304407619300648)
+to combine quantile estimation with fixed effects, which [Rios-Avila,
+Siles, and Canavire-Bacarreza
+(2024)](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4944894)
+show can be extended to the multidimensional fixed effects setting.
+
+`ferols()` drops singleton observations by default. This implementation
+choice affects not only the degrees-of-freedom adjustment in the
+standard error calculation (see [Correia
+2015](https://scorreia.com/research/singletons.pdf)), but in this case
+also ensures the scale parameter is correctly estimated with the MM-QR
+estimation. Singleton observations produce regression residuals that are
+equal to (or very close to) zero, causing the scale parameter to be
+understated when singleton observations are retained.
 
 ## Why?
 
@@ -42,17 +60,16 @@ regression](https://cran.r-project.org/web/views/Robust.html) as these
 provide much more flexible, tested, and rigorous implementations. Rather
 it aims to fill a narrow gap as these packages currently do not allow to
 absorb fixed effects during estimation and might thus run in
-performance/convergence problems in setting with many fixed effects.
+performance/memory problems in settings with many fixed effects.
 
 This package is under active development. The API, implementation
 details, and numerical behavior may and probably will change. Use with
-care and **do not rely on it to generate reproducible empirical results
-yet**.
+care.
 
 ## Installation (development version)
 
-`ferols` is not on CRAN. To install the current development version from
-GitHub:
+`ferols` is not on CRAN yet. To install the current development version
+from GitHub:
 
 ``` r
 install.packages("remotes")
@@ -102,10 +119,13 @@ with outliers.
 library(ferols)
 library(moments)
 df <- generate_panel_data(seed = 42, e_mult = 10)
-cat(sprintf("Kourtosis of composite error: %.2f", kurtosis(df$e)))
+cat(sprintf(
+  "True beta: 1, true gamma: 0, kurtosis of composite error: %.2f", 
+  kurtosis(df$e)
+))
 ```
 
-    Kourtosis of composite error: 24.83
+    True beta: 1, true gamma: 0, kurtosis of composite error: 24.83
 
 ``` r
 plot(
@@ -137,7 +157,7 @@ ferols(y ~ x + z | i + t, data = df, vcov = ~ i)
                      Within R2: 0.530223
 
 ``` r
-# For comparison: OLS has higher standard errors
+# For comparison: OLS has less precise estimates and larger standard errors
 fixest::feols(y ~ x + z | i + t, data = df, vcov = ~ i)
 ```
 
@@ -199,8 +219,8 @@ data-fig-align="center" />
 `ferols` produces coefficient, standard error, and scale estimates that
 are identical within numerical precision to the ones created by packages
 that do not aborb fixed effects (`MASS::rlm()`)[^1], that absorb one
-dimension of fixed effects (Stata’s `robreg`) and that absorb fixed
-effects accross two dimensions (Stata’s `robtwfe`). Summary statistics
+dimension of fixed effects (Stata’s `robreg`) and that absorb
+high-dimensional fixed effects (Stata’s `robhdfe`). Summary statistics
 of the relative differences of `ferols`’s estimates to these alternative
 packages ($rd_{est,package}$)
 
@@ -208,7 +228,7 @@ $$
 rd_{est,package}  = \frac{est_{ferols} - est_{package}}{est_{package}}
 $$
 
-based on 500 runs on independent randome samples created by
+based on 500 runs on independent random samples created by
 `generate_panel_data()`[^2] are presented in the table below.
 
 | Package | Estimate | Minimum(rd) | Maximum(rd) | Mean(\|rd\|) |
@@ -219,9 +239,9 @@ based on 500 runs on independent randome samples created by
 | robreg  | coef     |    -2.0e-10 |     3.5e-10 |      4.2e-11 |
 | robreg  | se       |    -9.1e-10 |    -2.5e-10 |      4.9e-10 |
 | robreg  | scale    |    -5.0e-13 |     4.0e-13 |      8.8e-14 |
-| robtwfe | coef     |    -1.2e-10 |     1.2e-10 |      2.6e-11 |
-| robtwfe | se       |    -4.7e-09 |     2.4e-09 |      1.0e-09 |
-| robtwfe | scale    |    -5.6e-14 |     8.6e-14 |      1.1e-14 |
+| robhdfe | coef     |    -1.6e-10 |     2.4e-10 |      2.7e-11 |
+| robhdfe | se       |    -3.8e-09 |     2.7e-09 |      1.1e-09 |
+| robhdfe | scale    |    -1.2e-13 |     7.2e-14 |      1.1e-14 |
 
 The processing times can be compared by the following table (notice the
 speed gain relative to `MASS::rlm()`, which has to estimate the
@@ -229,12 +249,12 @@ coefficients and SEs for 1,009 fixed effects).
 
 | Package | Mean \[secs\] | Low CI \[secs\] | High CI \[secs\] |
 |:--------|--------------:|----------------:|-----------------:|
-| ferols  |         0.168 |           0.166 |            0.171 |
-| robreg  |         0.752 |           0.747 |            0.756 |
-| robtwfe |         1.206 |           1.198 |            1.213 |
-| rlm     |        37.587 |          37.282 |           37.893 |
+| ferols  |         0.240 |           0.236 |            0.245 |
+| robreg  |         0.786 |           0.781 |            0.791 |
+| robhdfe |         1.081 |           1.074 |            1.088 |
+| rlm     |        37.588 |          37.277 |           37.899 |
 
-## Not yet implemented (sorted by priority)
+## Not yet implemented
 
 - Alternative loss functions
 - Weighted regressions

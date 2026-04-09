@@ -46,14 +46,14 @@ run_stata <- function(df, do_file) {
 
 run_ests <- function(
     rlm_fml = NULL, ferols_fml = rlm_fml, 
-    robreg_do_file = NULL, robtwfe_do_file = NULL,
+    robreg_do_file = NULL, robhdfe_do_file = NULL,
     rlm_parms = list(), ferols_parms = list(), data_parms = list()
   ) {
   if (
     is.null(rlm_fml) && is.null(ferols_fml) && 
-    is.null(robtwfe_do_file) && is.null(robreg_do_file)
+    is.null(robhdfe_do_file) && is.null(robreg_do_file)
   ) {
-    stop("At least one estimation method needs to be speic")
+    stop("At least one estimation method needs to be specified.")
   }
   if (!"seed" %in% names(data_parms)) {
     data_parms <- c(data_parms, list(seed = sample(seq_len(1e9), 1)))
@@ -70,9 +70,9 @@ run_ests <- function(
     rl_robreg <- run_stata(df, robreg_do_file)
     rl <- c(rl, robreg = list(c(list(do_file = robreg_do_file), rl_robreg)))
   } 
-  if (!is.null(robtwfe_do_file)) {
-    rl_robtwfe <- run_stata(df, robtwfe_do_file)
-    rl <- c(rl, robtwfe = list(c(list(do_file = robtwfe_do_file), rl_robtwfe)))
+  if (!is.null(robhdfe_do_file)) {
+    rl_robhdfe <- run_stata(df, robhdfe_do_file)
+    rl <- c(rl, robhdfe = list(c(list(do_file = robhdfe_do_file), rl_robhdfe)))
   } 
   if (!is.null(ferols_fml)) {
     rl_ferols <- do.call(run_ferols, c(ferols_fml, list(df), ferols_parms))
@@ -104,19 +104,21 @@ bmark_model <- function(model) {
         ferols_parms = list(vcov = ~i, scale_est = "lad_mm_ms", data.save = TRUE)
       ), simplify = FALSE  
     )
-  } else if (model == "robtwfe") {
+  } else if (model == "robhdfe") {
     out <- pbapply::pbreplicate(
       RUNS, run_ests(
+        data_parms = list(),
         ferols_fml = y ~ x + z | i + t, 
-        robtwfe_do_file = "utils/run_robtwfe.do",
-        ferols_parms = list(vcov = ~i, data.save = TRUE)
+        robhdfe_do_file = "utils/run_robhdfe.do",
+        ferols_parms = list(vcov = ~i, rm_singletons = F, data.save = TRUE)
       ), simplify = FALSE  
     )
-  } else if (model == "robreg_robtwfe") {
+  } else if (model == "robreg_robhdfe") {
     out <- pbapply::pbreplicate(
       RUNS, run_ests(
+        data_parms = list(),
         robreg_do_file = "utils/run_robreg.do",
-        robtwfe_do_file = "utils/run_robtwfe.do"
+        robhdfe_do_file = "utils/run_robhdfe.do"
       ), simplify = FALSE  
     )
   } else stop("Unknown model comparison")
@@ -183,7 +185,7 @@ create_bmark_stats <- function(rdiff_df) {
 bmark_stats <-data.frame()
 bmark_timing <- data.frame()
 
-for (m in c("rlm", "robreg", "robtwfe", "robreg_robtwfe")) {
+for (m in c("rlm", "robreg", "robhdfe", "robreg_robhdfe")) {
   fname <- sprintf("temp/bmark_%s_%d.rds", m, RUNS)
   if (file.exists(fname) & ! FORCE_RERUN) {
     message(sprintf("Data file '%s' exists. Skipping.", fname))

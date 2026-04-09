@@ -1,8 +1,8 @@
 # ------------------------------------------------------------------------------
 # A fixed effect robust Huber-M estimator
 #
-# Inspired the 'robtwfe' packge by David Veenman 
-# (https://github.com/dveenman/robtwfe)
+# Inspired by and co-developed with the 'robhdfe' packge by David Veenman 
+# (https://github.com/dveenman/robhdfe)
 #
 # Heavily draws from the fixest package and calls feols() as a workhose
 # in the IRLS process. UI should mimic the one of fixest as close as possible-
@@ -157,10 +157,6 @@ lad_mm_ms <- function(
   )
   denom <- as.numeric(stats::fitted(fit_scl, na.rm = FALSE))
   
-  # Avoiding numerical issues causing scale estimates to become zero 
-  eps <- sqrt(.Machine$double.eps)
-  denom <- pmax(denom, eps)
-  
   u <- e / denom
   qhat <- as.numeric(stats::quantile(
     u, probs = 0.5, type = 2, names = FALSE, na.rm = TRUE
@@ -223,10 +219,6 @@ lad_mm_rsc <- function(
   )
   denom <- as.numeric(stats::fitted(fit_scl, na.rm = FALSE))
   
-  # Avoiding numerical issues causing scale estimates to become zero 
-  eps <- sqrt(.Machine$double.eps)
-  denom <- pmax(denom, eps)
-
   u <- e / denom
   qhat <- as.numeric(stats::quantile(
     u, probs = 0.5, type = 2, names = FALSE, na.rm = TRUE
@@ -263,7 +255,7 @@ lad_mm_rsc <- function(
 #'
 #' @description
 #' Estimates linear models with high-dimensional fixed effects using 
-#' iteractively reweighted least squares (IRLS) for Huber M-estimation. 
+#' iteratively reweighted least squares (IRLS) for Huber M-estimation. 
 #' Fixed effects are absorbed using the approach of `fixest::demean`.
 #' Standard errors can be clustered via multiple levels using a Huber 
 #' (psi/phi) sandwich estimator.
@@ -284,7 +276,7 @@ lad_mm_rsc <- function(
 #'      (2019, https://doi.org/10.1016/j.jeconom.2019.04.009). 
 #'      This should yield similar scale and beta estimates as the approaches of 
 #'      the Stata packages `robreg` (https://github.com/benjann/robreg) and 
-#'      `robtwfe` (https://github.com/dveenman/robtwfe). 
+#'      `robhdfe` (https://github.com/dveenman/robhdfe). 
 #'    - `"lad_mm_rsc"`: Method of moments algorithm as extended by
 #'      Rios-Avila, Siles, and Canavire-Bacarreza 
 #'      (2024, https://docs.iza.org/dp17262.pdf). This algorithm is
@@ -337,6 +329,21 @@ lad_mm_rsc <- function(
 #' By default, `ferols()` mimics the algorithm of `robreg`. To generate
 #' estimates that are identical to `MASS::rlm()` use a call like 
 #' `ferols(fml, data, k = 1.345, scale_est = "ols", adj_rlm = TRUE, scale_update = TRUE, tol = 1e-4, vcov = "iid")`.
+#' 
+#' For the first-step quantile regression that is used to obtain the scale 
+#' estimate, `ferols()` implements the MM-QR estimation from 
+#' [Machado and Santos Silva(2019)](https://www.sciencedirect.com/science/article/pii/S0304407619300648)
+#' to combine quantile estimation with fixed effects, which 
+#' [Rios-Avila, Siles, and Canavire-Bacarreza (2024)](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4944894)
+#' show can be extended to the multidimensional fixed effects setting. 
+#'
+#' `ferols()` drops singleton observations by default. This implementation choice 
+#' affects not only the degrees-of-freedom adjustment in the standard error 
+#' calculation (see [Correia 2015](https://scorreia.com/research/singletons.pdf)), 
+#' but in this case also ensures the scale parameter is correctly estimated with 
+#' the MM-QR estimation. Singleton observations produce regression residuals that 
+#' are equal to (or very close to) zero, causing the scale parameter to be 
+#' understated when singleton observations are retained.
 #' 
 #' By default, `ferols()` relays the messages and warnings from the initial 
 #' location as well as the final IRLS estimation to the user. This behavior can
