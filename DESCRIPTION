@@ -1,7 +1,7 @@
 Package: ferols
 Type: Package
 Title: Fixed-Effects Robust OLS via IRLS (Huber M)
-Version: 0.0.0.9000
+Version: 0.1.0
 Authors@R: person("Joachim", "Gassen", role = c("aut", "cre"), 
     email = "gassen@wiwi.hu-berlin.de",
     comment = c(ORCID = "0000-0003-4364-2911"))
@@ -9,14 +9,13 @@ Description: Tools for estimating fixed-effects linear models using
   Huber M-estimation via iteratively reweighted least squares (IRLS). The 
   package builds on the 'fixest' framework to absorb high-dimensional fixed 
   effects and provides robust sandwich variance estimators with fixest-style 
-  interfaces. This is early-stage, work-in-progress research software; the 
-  API and numerical behavior may change and the package should not yet be 
-  used for reproducible empirical analysis.
+  interfaces. This is work-in-progress research software; the API and numerical 
+  behavior may change.
 License: MIT + file LICENSE
 Encoding: UTF-8
 LazyData: true
 Depends: R (>= 4.0)
-Imports: fixest (>= 0.13.2), quantreg, stats
+Imports: fixest (>= 0.14.0), quantreg, stats
 Suggests: testthat (>= 3.0.0), moments, MASS
 Config/testthat/edition: 3
 Roxygen: list(markdown = TRUE)

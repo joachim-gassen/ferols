@@ -544,7 +544,7 @@ ferols <- function(
   # compute se + coeftable like fixest does
   se0 <- sqrt(diag(V))
   names(se0) <- names(coef(fit))
-  attr(se0, "type") <- attr(V, "type")
+  attr(se0, "vcov_type") <- attr(V, "vcov_type")
   
   # df for t-stats: use fixest df if available; otherwise fall back
   df_r <- tryCatch(fit$fixest$df.residual, error = function(e) NULL)
@@ -563,7 +563,7 @@ ferols <- function(
     `Pr(>|t|)` = pval
   )
   
-  attr(ct, "type") <- attr(se0, "type")
+  attr(ct, "vcov_type") <- attr(se0, "vcov_type")
   
   fit$se <- se0
   fit$coeftable <- ct
@@ -696,7 +696,7 @@ vcov.ferols <- function(
     V <- (stddev^2) * cov_unscaled
     colnames(V) <- colnames(Xr)
     rownames(V) <- colnames(Xr)
-    attr(V, "type") <- paste0("IID model-based")
+    attr(V, "vcov_type") <- paste0("IID model-based")
   } else {
     Xr <- if (!is.null(fe_df)) {
       fixest::demean(X, f = fe_df, weights = phi, na.rm = TRUE) 
@@ -717,9 +717,9 @@ vcov.ferols <- function(
   
     # Set attributes so that downstream functions report appropriate SE type
     if (is.character(vcov)) {
-      attr(V, "type") <- "Heteroskedasticity-robust"
+      attr(V, "vcov_type") <- "Heteroskedasticity-robust"
     } else {
-      attr(V, "type") <- paste0(
+      attr(V, "vcov_type") <- paste0(
         "Clustered (", paste(cl_vars, collapse = " & "), ")"
       )
     }
@@ -778,8 +778,8 @@ summary.ferols <- function(
   s$cov.scaled <- V
   
   # Set SE attributes
-  attr(s$se, "type") <- attr(V, "type")
-  attr(s$coeftable, "type") <- attr(V, "type")
+  attr(s$se, "vcov_type") <- attr(V, "vcov_type")
+  attr(s$coeftable, "vcov_type") <- attr(V, "vcov_type")
   class(s) <- c("ferols", class(s))
   s
 }

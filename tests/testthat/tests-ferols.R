@@ -20,14 +20,14 @@ test_that("ferols runs and returns a ferols/fixest object", {
   
   s <- summary(fit)
   expect_true(is.numeric(s$se))
-  expect_equal(attr(s$se, "type"), "IID model-based")
+  expect_equal(attr(s$se, "vcov_type"), "IID model-based")
 })
 
 
 test_that("default vcov is hetero-robust and default scale_est is 'lad_mm_rsc'", {
   expect_no_warning(fit <- ferols(y ~ x | i + t, data = test_df))
   expect_true(is.matrix(fit$cov.scaled))
-  type <- attr(fit$cov.scaled, "type")
+  type <- attr(fit$cov.scaled, "vcov_type")
   expect_true(is.character(type))
   expect_true(grepl("Heteroskedasticity-robust", type))
   expect_true(grepl("Standard-errors: Hetero", cap(fit), fixed = TRUE))
@@ -48,7 +48,7 @@ test_that("vcov specifications ~i and cluster = 'i' are accepted", {
   expect_no_warning(se1 <- summary(f1)$se)
   expect_no_warning(se2 <- summary(f2)$se)
   expect_equal(unname(se1), unname(se2), tolerance = 1e-10)
-  expect_true(grepl("Clustered", attr(se1, "type")))
+  expect_true(grepl("Clustered", attr(se1, "vcov_type")))
   expect_true(grepl("Standard-errors: Clustered (i)", cap(f1), fixed = TRUE))
   expect_true(grepl("Standard-errors: Clustered (i)", cap(summary(f1)), fixed = TRUE))
 })
@@ -67,7 +67,7 @@ test_that("vcov specifications ~i + t and cluster = c('i', 't') are accepted", {
   expect_no_warning(se1 <- summary(f1)$se)
   expect_no_warning(se2 <- summary(f2)$se)
   expect_equal(unname(se1), unname(se2), tolerance = 1e-10)
-  expect_true(grepl("Clustered", attr(se1, "type")))
+  expect_true(grepl("Clustered", attr(se1, "vcov_type")))
   expect_true(grepl("Standard-errors: Clustered (i & t)", cap(f1), fixed = TRUE))
   expect_true(grepl("Standard-errors: Clustered (i & t)", cap(summary(f1)), fixed = TRUE))
 })
