@@ -1,8 +1,8 @@
 # ferols: A Robust M-Estimator with Huber Loss for Fixed-Effect Models
 
 
-The R package `ferols` implements a robust M-Estimator for linear models
-with high-dimensional fixed effects, a Huber loss function and
+The R package `ferols`[^1] implements a robust M-Estimator for linear
+models with high-dimensional fixed effects, a Huber loss function and
 iteratively reweighted least squares (IRLS). It is inspired by and
 co-developed with the  
 the [Stata package `robhdfe` by David
@@ -173,7 +173,7 @@ fixest::feols(y ~ x + z | i + t, data = df, vcov = ~ i)
     RMSE: 1.74302     Adj. R2: 0.284435
                     Within R2: 0.240686
 
-## A comparison of the precision of OLS and robust M by increasing kurtosis of e
+## Precision of OLS and robust M by increasing error kurtosis
 
 ``` r
 library(ferols)
@@ -239,7 +239,7 @@ respective package to yield an estimate.
 
 `ferols` produces coefficient, standard error, and scale estimates that
 are identical within numerical precision to the ones created by packages
-that do not aborb fixed effects (`MASS::rlm()`)[^1], that absorb one
+that do not aborb fixed effects (`MASS::rlm()`)[^2], that absorb one
 dimension of fixed effects (Stata’s `robreg`) and that absorb
 high-dimensional fixed effects (Stata’s `robhdfe`). Summary statistics
 of the relative differences of `ferols`’s estimates to these alternative
@@ -250,7 +250,7 @@ rd_{est,package}  = \frac{est_{ferols} - est_{package}}{est_{package}}
 $$
 
 based on 500 runs on independent random samples created by
-`generate_panel_data()`[^2] are presented in the table below.
+`generate_panel_data()`[^3] are presented in the table below.
 
 | Package | Estimate | Minimum(rd) | Maximum(rd) | Mean(\|rd\|) |
 |:--------|:---------|------------:|------------:|-------------:|
@@ -269,9 +269,15 @@ based on 500 runs on independent random samples created by
 - Alternative loss functions
 - Weighted regressions
 
-[^1]: To mimic the algorithm used by `MASS::rlm()`, `ferols` is called
+[^1]: Technically, the name `ferols` is misleading, as the package uses
+    iteratively reweighted least squares and not plain OLS to derive its
+    estimates. But then again, `ferreg()` sounds like a rodent to me and
+    I liked the analogy of the name with `fixest::feols()`. Alternative
+    name suggestions are always welcome ;-).
+
+[^2]: To mimic the algorithm used by `MASS::rlm()`, `ferols` is called
     with the parameters
     `k = 1.345,  scale_est = "ols", adj_rlm = TRUE, scale_update = TRUE, tol = 1e-4,  vcov = "iid"`.
 
-[^2]: The code to create the benchmark data is at
+[^3]: The code to create the benchmark data is at
     `utils/compare_ests.R`.

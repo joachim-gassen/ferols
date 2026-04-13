@@ -14,7 +14,7 @@ comp_stats <- readRDS("utils/comp_stats.rds")
 bmark_est_res <- readRDS("utils/bmark_est_res.rds")
 ```
 
-The R package `ferols` implements a robust M-Estimator for linear models with 
+The R package `ferols`^[Technically, the name `ferols` is misleading, as the package uses iteratively reweighted least squares and not plain OLS to derive its estimates. But then again, `ferreg()` sounds like a rodent to me and I liked the analogy of the name with `fixest::feols()`. Alternative name suggestions are always welcome ;-).] implements a robust M-Estimator for linear models with 
 high-dimensional fixed effects, a Huber loss function and iteratively 
 reweighted least squares (IRLS). It is inspired by and co-developed with the  
 the [Stata package `robhdfe` by David Veenman](https://github.com/dveenman/robhdfe). 
@@ -141,7 +141,7 @@ ferols(y ~ x + z | i + t, data = df, vcov = ~ i)
 fixest::feols(y ~ x + z | i + t, data = df, vcov = ~ i)
 ```
 
-## A comparison of the precision of OLS and robust M by increasing kurtosis of e
+## Precision of OLS and robust M by increasing error kurtosis
 
 ```{r exp2, fig.align="center"}
 library(ferols)
