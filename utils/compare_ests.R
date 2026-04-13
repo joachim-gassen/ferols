@@ -19,7 +19,7 @@ run_rlm <- function(fml, df, ...) {
   fit <- MASS::rlm(fml, df, ...)
   time_out <- Sys.time()
   list(
-    run_time = as.vector(time_out - time_in),
+    run_time = as.vector(difftime(time_out, time_in, units = "secs")),
     est = coef(fit)[["x"]],
     se = summary(fit)$coef["x", 2],
     scale = fit$s
@@ -31,7 +31,7 @@ run_ferols <- function(fml, df, ...) {
   fit <- ferols(fml, df, ...)
   time_out <- Sys.time()
   list(
-    run_time = as.vector(time_out - time_in),
+    run_time = as.vector(difftime(time_out, time_in, units = "secs")),
     est = coef(fit)[["x"]],
     se = fit$se[["x"]],
     scale = fit$robust$scale
@@ -82,7 +82,7 @@ run_ests <- function(
   rl
 }
 
-bmark_model <- function(model) {
+comp_model <- function(model) {
   if (model == "rlm") {
     out <- pbapply::pbreplicate(
       RUNS, run_ests(
@@ -110,7 +110,7 @@ bmark_model <- function(model) {
         data_parms = list(),
         ferols_fml = y ~ x + z | i + t, 
         robhdfe_do_file = "utils/run_robhdfe.do",
-        ferols_parms = list(vcov = ~i, rm_singletons = F, data.save = TRUE)
+        ferols_parms = list(vcov = ~i, data.save = TRUE)
       ), simplify = FALSE  
     )
   } else if (model == "robreg_robhdfe") {
@@ -125,7 +125,7 @@ bmark_model <- function(model) {
   out
 }
 
-create_bmark_runs_df <- function(run_list) {
+create_comparison_runs_df <- function(run_list) {
   stats_to_df <- function(l, vars = VARS) {
     rl <- do.call(rbind, lapply(l, function(l) if (all(vars %in% names(l))) unlist(l[vars])))
     df <- cbind(model = rownames(rl), as.data.frame(rl))
@@ -141,7 +141,7 @@ create_bmark_runs_df <- function(run_list) {
   extract_df(run_list)
 }
 
-create_bmark_runs_rdiff <- function(run_df) {
+create_comparison_runs_rdiff <- function(run_df) {
   m <- unique(run_df$model)
   rdiff_vars <- VARS[VARS != "run_time"]
   run_wide <- reshape(run_df, direction = "wide", idvar="run", timevar="model")
@@ -170,7 +170,7 @@ plot_rdiffs <- function(rdiff_df) {
   par(op)
 }
 
-create_bmark_stats <- function(rdiff_df) {
+create_comparison_stats <- function(rdiff_df) {
   rdiff_vars <- VARS[VARS != "run_time"]
   rdiff_cols <- paste0("rdiff_", rdiff_vars)
   data.frame(
@@ -182,42 +182,26 @@ create_bmark_stats <- function(rdiff_df) {
   )
 }
 
-bmark_stats <-data.frame()
-bmark_timing <- data.frame()
+comp_stats <-data.frame()
 
 for (m in c("rlm", "robreg", "robhdfe", "robreg_robhdfe")) {
-  fname <- sprintf("temp/bmark_%s_%d.rds", m, RUNS)
+  fname <- sprintf("temp/comp_%s_%d.rds", m, RUNS)
   if (file.exists(fname) & ! FORCE_RERUN) {
     message(sprintf("Data file '%s' exists. Skipping.", fname))
     run_list <- readRDS(fname)
   } else {
     message(sprintf("Running Benchmark '%s' (n = %d)", m, RUNS))
-    run_list <- bmark_model(m)
+    run_list <- comp_model(m)
     message(sprintf("Saving benchmark data to '%s'.", fname))
     saveRDS(run_list, fname)
   }
-  run_df <- create_bmark_runs_df(run_list)
-  bmark_timing <- rbind(
-    bmark_timing, 
-    do.call(
-      data.frame,
-      aggregate(
-        run_df["run_time"], by = list(model = run_df$model),
-        FUN = function(v) c(
-          run_time_mn = mean(v), 
-          run_time_lb = t.test(v)$conf.int[1],
-          run_time_ub = t.test(v)$conf.int[2]
-        )
-      )
-    )
-  )
-  rdiff_df <- create_bmark_runs_rdiff(run_df)
+  run_df <- create_comparison_runs_df(run_list)
+  rdiff_df <- create_comparison_runs_rdiff(run_df)
   plot_rdiffs(rdiff_df)
-  bmark_stats <- rbind(
-    bmark_stats, cbind(model = m, create_bmark_stats(rdiff_df))
+  comp_stats <- rbind(
+    comp_stats, cbind(model = m, create_comparison_stats(rdiff_df))
   )
 }
 
-saveRDS(bmark_stats, "utils/bmark_stats.rds")
-saveRDS(bmark_timing, "utils/bmark_timing.rds")
+saveRDS(comp_stats, "utils/comp_stats.rds")
 

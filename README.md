@@ -21,7 +21,7 @@ and combines robust M-estimation (Huber loss) with:
 - high-dimensional fixed-effect absorption,
 - fast estimation via `fixest::feols`,
 - and a `fixest` style variance–covariance interface allowing for
-  clustered sandwich standard errors.
+  muti-dimensional clustered standard errors.
 
 For the first-step quantile regression that is used to obtain the scale
 estimate, `ferols()` implements the MM-QR estimation from [Machado and
@@ -150,7 +150,7 @@ ferols(y ~ x + z | i + t, data = df, vcov = ~ i)
     Standard-errors: Clustered (i) 
       Estimate Std. Error   t value  Pr(>|t|)    
     x 1.003965   0.007369 136.24598 < 2.2e-16 ***
-    z 0.012563   0.007349   1.70941  0.087409 .  
+    z 0.012563   0.007349   1.70941  0.087685 .  
     ---
     Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
     RMSE: 0.900109     Adj. R2: 0.575472
@@ -214,7 +214,28 @@ legend(
 <img src="README_files/figure-commonmark/exp2-1.png"
 data-fig-align="center" />
 
-## Benchmarking `ferols` with other R and Stata packages for Robust M-Estimation
+## Benchmarking `ferols` with other R and Stata packages
+
+The average processing times in seconds for various fixed effect
+structures can be compared by the following table. Notice the speed gain
+relative to `MASS::rlm()`, which has to estimate the coefficients and
+SEs for all fixed effects. Missing values are caused by failure of the
+respective package to yield an estimate.
+
+| N \[units\] | N \[time\] | Runs | R `ferols` | R `rlm` | Stata `robhdfe` | Stata `robreg` |
+|------------:|-----------:|-----:|-----------:|--------:|----------------:|---------------:|
+|         100 |        100 |   10 |       0.10 |    1.05 |            0.84 |           3.86 |
+|         200 |        200 |   10 |       0.14 |   11.84 |            1.87 |          41.29 |
+|         300 |        300 |   10 |       0.24 |   50.69 |            3.28 |         182.49 |
+|         400 |        400 |   10 |       0.38 |  120.57 |            5.40 |             － |
+|         500 |        500 |   10 |       0.60 |  259.79 |            8.71 |             － |
+|         600 |        600 |   10 |       0.81 |  523.63 |           12.34 |             － |
+|         700 |        700 |   10 |       1.02 | 1005.74 |           16.77 |             － |
+|         800 |        800 |   10 |       1.27 | 2152.53 |           21.64 |             － |
+|         900 |        900 |   10 |       1.51 | 4170.60 |           27.69 |             － |
+|        1000 |       1000 |   10 |       1.84 | 8069.46 |           34.52 |             － |
+
+## Comparing coefficient, scale and standard error estimates across packages
 
 `ferols` produces coefficient, standard error, and scale estimates that
 are identical within numerical precision to the ones created by packages
@@ -242,17 +263,6 @@ based on 500 runs on independent random samples created by
 | robhdfe | coef     |    -1.6e-10 |     2.4e-10 |      2.7e-11 |
 | robhdfe | se       |    -3.8e-09 |     2.7e-09 |      1.1e-09 |
 | robhdfe | scale    |    -1.2e-13 |     7.2e-14 |      1.1e-14 |
-
-The processing times can be compared by the following table (notice the
-speed gain relative to `MASS::rlm()`, which has to estimate the
-coefficients and SEs for 1,009 fixed effects).
-
-| Package | Mean \[secs\] | Low CI \[secs\] | High CI \[secs\] |
-|:--------|--------------:|----------------:|-----------------:|
-| ferols  |         0.240 |           0.236 |            0.245 |
-| robreg  |         0.786 |           0.781 |            0.791 |
-| robhdfe |         1.081 |           1.074 |            1.088 |
-| rlm     |        37.588 |          37.277 |           37.899 |
 
 ## Not yet implemented
 

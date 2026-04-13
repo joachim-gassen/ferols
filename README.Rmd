@@ -4,9 +4,14 @@ format: gfm
 ---
 
 ```{r Setup, echo=FALSE}
-library(kableExtra)
-bmark_stats <- readRDS("utils/bmark_stats.rds")
-bmark_timing <- readRDS("utils/bmark_timing.rds")
+suppressPackageStartupMessages(suppressMessages({
+  library(kableExtra)
+  library(dplyr)
+  library(tidyr)
+}))
+
+comp_stats <- readRDS("utils/comp_stats.rds")
+bmark_est_res <- readRDS("utils/bmark_est_res.rds")
 ```
 
 The R package `ferols` implements a robust M-Estimator for linear models with 
@@ -27,7 +32,7 @@ and combines robust M-estimation (Huber loss) with:
 - high-dimensional fixed-effect absorption,
 - fast estimation via `fixest::feols`,
 - and a `fixest` style variance–covariance interface allowing for
-  clustered sandwich standard errors.
+  muti-dimensional clustered standard errors.
 
 For the first-step quantile regression that is used to obtain the scale 
 estimate, `ferols()` implements the MM-QR estimation from 
@@ -174,11 +179,44 @@ legend(
 )
 ```
 
-## Benchmarking `ferols` with other R and Stata packages for Robust M-Estimation
+## Benchmarking `ferols` with other R and Stata packages 
 
-`ferols` produces coefficient, standard error, and scale estimates that are 
-identical within numerical precision to the ones created by packages that do not
-aborb fixed effects (`MASS::rlm()`)^[To mimic the algorithm used by 
+The average processing times in seconds for various fixed effect structures can 
+be compared by the following table. Notice the speed gain relative to 
+`MASS::rlm()`, which has to estimate the coefficients and SEs for all fixed 
+effects. Missing values are caused by failure of the respective package to 
+yield an estimate.
+
+```{r TabBenchmark, echo=FALSE}
+options(knitr.kable.NA = '－') 
+
+df <- bmark_est_res %>%
+  mutate(run_time = ifelse(!is.na(est), run_time, NA)) %>%
+  group_by(model, n_units, n_time) %>%
+  summarise(
+    runs = n(),
+    mn_run_time = mean(run_time),
+    .groups = "drop"
+  ) %>% 
+  pivot_wider(
+    id_cols = c(n_units, n_time, runs), names_from = model,
+    values_from = mn_run_time
+  )
+
+colnames(df) <- c(
+  "N [units]", "N [time]", "Runs", "R `ferols`", "R `rlm`", 
+  "Stata `robhdfe`", "Stata `robreg`"
+)
+rownames(df) <- NULL
+kable(df, align = "r", digits = 2) 
+```
+
+
+## Comparing coefficient, scale and standard error estimates across packages
+
+`ferols` produces coefficient, standard error, and scale estimates that are
+identical within numerical precision to the ones created by packages that do 
+not aborb fixed effects (`MASS::rlm()`)^[To mimic the algorithm used by 
 `MASS::rlm()`, `ferols` is called with the parameters `k = 1.345, 
 scale_est = "ols", adj_rlm = TRUE, scale_update = TRUE, tol = 1e-4, 
 vcov = "iid"`.], that absorb one dimension of fixed effects 
@@ -190,12 +228,12 @@ $$
 rd_{est,package}  = \frac{est_{ferols} - est_{package}}{est_{package}}
 $$
 
-based on `{r} unique(bmark_stats$runs)` runs on independent random samples 
+based on `{r} unique(comp_stats$runs)` runs on independent random samples 
 created by `generate_panel_data()`^[The code to create the benchmark data is at 
 `utils/compare_ests.R`.] are presented in the table below.
 
-```{r TabRelDiff, echo=FALSE}
-df <- bmark_stats[1:9,c(1:2, 4:6)]
+```{r TabComparison, echo=FALSE}
+df <- comp_stats[1:9,c(1:2, 4:6)]
 df[df[,2] == "est", 2] <- "coef"
 df[, 3] <- sprintf("%.1e", df[, 3])
 df[, 4] <- sprintf("%.1e", df[, 4])
@@ -206,18 +244,6 @@ colnames(df) <- c(
 kable(df, align = "llrrr", digits = 20) 
 ```
 
-The processing times can be compared by the following table (notice the speed 
-gain relative to `MASS::rlm()`, which has to estimate the coefficients and SEs 
-for 1,009 fixed effects).
-
-```{r TabTiming, echo=FALSE}
-df <- bmark_timing[c(3, 4, 6, 2), ]
-colnames(df) <- c(
-  "Package", "Mean [secs]", "Low CI [secs]", "High CI [secs]"
-)
-rownames(df) <- NULL
-kable(df, align = "lrrr", digits = 3) 
-```
 
 
 ## Not yet implemented
