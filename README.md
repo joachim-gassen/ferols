@@ -13,8 +13,8 @@ designed to integrate tightly with the
 It builds on our recent work
 
 > Joachim Gassen and David Veenman (2026): Estimation Precision and
-> Robust Inference in Archival Research, SSRN Working Paper,
-> http://dx.doi.org/10.2139/ssrn.4975569.
+> Robust Inference in Archival Research, Journal of Accounting and
+> Economics, forthcoming, https://doi.org/10.1016/j.jacceco.2026.101895.
 
 and combines robust M-estimation (Huber loss) with:
 
