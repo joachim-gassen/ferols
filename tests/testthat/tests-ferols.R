@@ -23,7 +23,6 @@ test_that("ferols runs and returns a ferols/fixest object", {
   expect_equal(attr(s$se, "vcov_type"), "IID model-based")
 })
 
-
 test_that("default vcov is hetero-robust and default scale_est is 'lad_mm_rsc'", {
   expect_no_warning(fit <- ferols(y ~ x | i + t, data = test_df))
   expect_true(is.matrix(fit$cov.scaled))
@@ -74,13 +73,41 @@ test_that("vcov specifications ~i + t and cluster = c('i', 't') are accepted", {
 
 
 test_that("unsupported features error cleanly", {
-  expect_error(ferols(y ~ 1 | i + t | p ~ x, data = test_df))
-  expect_error(ferols(y ~ 1 | i + t, data = test_df, weights = runif(nrow(test_df))))
-  expect_error(ferols(y ~ x | i + t, data = test_df, scale_est = "unknown"))
-  expect_error(ferols(y ~ x | i + t, data = test_df, scale_est = "lad_rq"))
-  expect_error(ferols(y ~ x | i + t, data = test_df, vcov = "NW"))
-  expect_error(ferols(y ~ x | i + t, data = test_df, vcov = matrix(1, 1, 1)))
-  expect_error(ferols(y ~ x | i + t, data = test_df, efficiency = 0.6))
+  expect_error(
+    ferols(y ~ 1 | i + t | p ~ x, data = test_df),
+    "Three part formulae \\(including IVs\\) are not supported by ferols\\(\\)\\."
+  )
+  expect_error(
+    ferols(y ~ x + z | i + t, data = test_df, weights = runif(nrow(test_df))), 
+    "Argument 'weights' is not supported by ferols\\(\\)\\." 
+  )
+  expect_error(
+    ferols(y ~ x | i + t, data = test_df, scale_est = "unknown"),
+    "Scale estimation alogorithm 'unknown' is not supported\\."
+  )
+  expect_error(
+    ferols(y ~ x | i + t, data = test_df, scale_est = "lad_rq"),
+    paste(
+      "'lad_rq' selected for scale estimation but fixed effects are",
+      "present in the model's fomula\\."
+    )
+  )
+  expect_error(
+    ferols(y ~ x | i + t, data = test_df, vcov = "NW"),
+    "VCOV type 'nw' is not supported yet in ferols\\(\\)\\."
+  )
+  expect_error(
+    ferols(y ~ x | i + t, data = test_df, vcov = matrix(1, 1, 1)),
+    "ferols\\(\\) does not support custom vcov functions/matrices\\."
+  )
+  expect_error(
+    ferols(y ~ x | i + t, data = test_df, efficiency = 0.6),
+    "Efficiency must be in \\(0\\.68, 1\\)\\."
+  )
+  expect_error(
+    ferols(y ~ x | i + t, data = test_df, family = 'tukey'),
+    "Only family = 'huber' is currently supported\\."
+  )
 })
 
 test_that("efficiency 0.7 runs", {

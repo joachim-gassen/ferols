@@ -389,8 +389,8 @@ ferols <- function(
   dots <- list(...)
   if ("warn" %in% names(dots)) warn <- dots$warn else warn <- TRUE
   if ("notes" %in% names(dots)) notes <- dots$notes else notes <- TRUE
-  if ("weights" %in% dots) {
-    stop("Argument 'weights' is not supported by 'ferols()'.")
+  if ("weights" %in% names(dots)) {
+    stop("Argument 'weights' is not supported by ferols().")
   }
   if ("fixef.rm" %in% dots) {
     stop(paste(
@@ -403,7 +403,7 @@ ferols <- function(
     stop("Only family = 'huber' is currently supported.")
   }
   if (!is.numeric(efficiency) || efficiency < 0.68 || efficiency > 1) {
-    stop("efficiency must be in (0.68, 1).")
+    stop("Efficiency must be in (0.68, 1).")
   }
   fml_split <- fixest:::fml_split(fml, raw = TRUE)
   if (length(fml_split) > 2) stop(
