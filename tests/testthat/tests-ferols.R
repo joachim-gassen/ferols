@@ -71,6 +71,28 @@ test_that("vcov specifications ~i + t and cluster = c('i', 't') are accepted", {
   expect_true(grepl("Standard-errors: Clustered (i & t)", cap(summary(f1)), fixed = TRUE))
 })
 
+test_that("various SE types are supported", {
+  # needs to be attached for NW(2) to work
+  library(fixest)
+  
+  expect_no_warning(
+    f1 <- ferols(y ~ x | i + t, data = test_df, vcov = NW(2) ~ i + t)
+  )
+  expect_no_warning(se1 <- summary(f1)$se)
+  expect_true(grepl("Newey-West (L=2)", attr(se1, "vcov_type"), fixed = T))
+
+  expect_no_warning(
+    f2 <- ferols(y ~ x | i + t, data = test_df, vcov = DK(2) ~ t)
+  )
+  expect_no_warning(se2 <- summary(f2)$se)
+  expect_true(grepl("Driscoll-Kraay (L=2)", attr(se2, "vcov_type"), fixed = T))
+  
+  expect_no_warning(
+    f3 <- ferols(y ~ x | i + t, data = test_df, vcov = matrix(1, 1, 1))
+  )
+  expect_no_warning(se3 <- summary(f3)$se)
+  expect_true(grepl("Custom", attr(se3, "vcov_type"), fixed = T))
+})
 
 test_that("unsupported features error cleanly", {
   expect_error(
@@ -92,14 +114,7 @@ test_that("unsupported features error cleanly", {
       "present in the model's fomula\\."
     )
   )
-  expect_error(
-    ferols(y ~ x | i + t, data = test_df, vcov = "NW"),
-    "VCOV type 'nw' is not supported yet in ferols\\(\\)\\."
-  )
-  expect_error(
-    ferols(y ~ x | i + t, data = test_df, vcov = matrix(1, 1, 1)),
-    "ferols\\(\\) does not support custom vcov functions/matrices\\."
-  )
+
   expect_error(
     ferols(y ~ x | i + t, data = test_df, efficiency = 0.6),
     "Efficiency must be in \\(0\\.68, 1\\)\\."

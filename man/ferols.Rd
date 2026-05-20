@@ -84,13 +84,16 @@ inintial coefficients and scale as well as during IRLS steps. Defaults to
 \code{TRUE} (\code{fixest::feols()}  default). Set to \code{FALSE} to mimic the current
 behavior of Stata's \code{robtwfe}.}
 
-\item{vcov}{Variance–covariance specification. Either \code{"iid"},
-\code{"hetero"}, \code{"cluster"}, \code{"twoway"} or a formula
+\item{vcov}{Variance–covariance specification as required by
+\code{\link[fixest:feols]{fixest::feols()}}. Either \code{"iid"},
+\code{"hetero"}, \code{"cluster"}, \code{"twoway"},
+\code{"NW"}, \code{"DK"}, \code{"conley"},  or a formula
 such as \code{~ id} or  \code{cluster ~ id + time}.
-Defaults to heteroskedasticity-robust (White) standard errors.}
+Defaults to heteroskedasticity-robust (White) standard errors.
+See details for details.}
 
 \item{ssc}{Small-sample correction. Passed on to
-\code{"fixest::vocov.fixest"}.}
+\code{\link[fixest:vcov.fixest]{fixest::vcov.fixest()}}.}
 
 \item{cluster}{(deprecated) clustering variable name(s) (string).
 Note that this argument is deprecated, you should use \code{vcov} instead.}
@@ -133,9 +136,11 @@ estimates.
 \description{
 Estimates linear models with high-dimensional fixed effects using
 iteratively reweighted least squares (IRLS) for Huber M-estimation.
-Fixed effects are absorbed using the approach of \code{fixest::demean}.
-Standard errors can be clustered via multiple levels using a Huber
-(psi/phi) sandwich estimator.
+Fixed effects are absorbed using the approach of \code{\link[fixest:demean]{fixest::demean()}}
+and the actual estimation steps are relegated to \code{\link[fixest:feols]{fixest::feols()}}.
+Standard errors can be clustered via multiple levels and alternative
+standard error estimates provided via \link[fixest:fixest-package]{fixest::fixest} are supported using a Huber
+(psi/phi) modified sandwich estimator.
 }
 \details{
 \code{ferols()} implements an IRLS process based on initial location and scale
@@ -162,9 +167,21 @@ the MM-QR estimation. Singleton observations produce regression residuals that
 are equal to (or very close to) zero, causing the scale parameter to be
 understated when singleton observations are retained.
 
+It supports various variance–covariance matrices estimates.
+For "iid" standard errors, the method mirrors
+the approach of \code{\link[MASS:rlm]{MASS::rlm()}}. All other standard error types are
+relegated to \code{\link[fixest:vcov.fixest]{fixest::vcov.fixest()}} after the bread
+part of the sandwich estimator is adjusted as discussed in Appendix A.2 of
+\href{https://doi.org/10.1016/j.jacceco.2026.101895}{Gassen and Veenman (2026)}.
+This has been verified to yield consistent standard errors for (multiway)
+clustered SEs but should also work for other SEs (e.g., Newey-West,
+Discroll-Kray, and Conley) that follow the sandwich estimator structure.
+Use with care for these and feel free to open an issue on GitHub
+if you sense any inconsistencies.
+
 By default, \code{ferols()} relays the messages and warnings from the initial
 location as well as the final IRLS estimation to the user. This behavior can
-be changed by setting the \code{warn} and \code{notes} arguments of \code{fixest::feols()}
+be changed by setting the \code{warn} and \code{notes} arguments of \code{\link[fixest:feols]{fixest::feols()}}
 }
 \examples{
 df <- generate_panel_data(n_units = 50, n_time = 10, seed = 42)

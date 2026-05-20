@@ -21,7 +21,7 @@ and combines robust M-estimation (Huber loss) with:
 - high-dimensional fixed-effect absorption,
 - fast estimation via `fixest::feols`,
 - and a `fixest` style variance–covariance interface allowing for
-  muti-dimensional clustered standard errors.
+  various (clustered) standard errors.
 
 For the first-step quantile regression that is used to obtain the scale
 estimate, `ferols()` implements the MM-QR estimation from [Machado and
