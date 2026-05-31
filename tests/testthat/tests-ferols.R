@@ -2,14 +2,11 @@
 cap <- function(expr) paste(capture.output(expr), collapse = "\n")
 
 test_df <- generate_panel_data(seed = 42)
+test_df$lat <- rep(runif(1000, -40, 40), each = 10)
+test_df$long <- rep(runif(1000, -80, 80), each = 10)
+test_df$r <- rep(sprintf("r_%02d", 1:10), each = 1000)
 assign("test_df", test_df, envir = .GlobalEnv)
 on.exit(rm("test_df", envir = .GlobalEnv), add = TRUE)
-
-test_df_conley <- test_df
-test_df_conley$lat <- rep(runif(1000, -40, 40), each = 10)
-test_df_conley$long <- rep(runif(1000, -80, 80), each = 10)
-assign("test_df_conley", test_df_conley, envir = .GlobalEnv)
-on.exit(rm("test_df_conley", envir = .GlobalEnv), add = TRUE)
 
 test_df_missing <- generate_panel_data(seed = 42, share_missing = 0.3)
 assign("test_df_missing", test_df_missing, envir = .GlobalEnv)
@@ -100,11 +97,22 @@ test_that("various SE types are supported", {
   expect_true(grepl("Custom", attr(se3, "vcov_type"), fixed = T))
   
   expect_no_warning(
-    f4 <- ferols(y ~ x | i + t, data = test_df_conley, vcov = conley(500))
+    f4 <- ferols(y ~ x | i + t, data = test_df, vcov = conley(500))
   )
   expect_no_warning(se4 <- summary(f4)$se)
   expect_true(grepl("Conley (500km)", attr(se4, "vcov_type"), fixed = T))
-  
+})
+
+test_that("interactions are supported in fixed effects and vcov formulas", {
+  expect_no_warning(
+    fit_rsc <- ferols(y ~ x | i + t^r, data = test_df, scale_est = "lad_mm_rsc")
+  )
+  expect_no_warning(
+    fit_ms <- ferols(y ~ x | i + t^r, data = test_df, scale_est = "lad_mm_ms")
+  )
+  expect_equal(fit_rsc$robust$scale, fit_ms$robust$scale)
+  expect_equal(fit_rsc$coefficients, fit_ms$coefficients)
+  expect_equal(fit_rsc$se, fit_ms$se)
 })
 
 test_that("unsupported features error cleanly", {
@@ -237,8 +245,8 @@ test_that("data.save = TRUE allows vcov after data removal", {
   # sanity check: data was saved by fixest
   expect_true(!is.null(fit$data))
   
-  # check whether data is identical to test_id
-  expect_equal(fit$data, test_df, ignore_attr = TRUE)
+  # check whether data is identical to generated data
+  expect_equal(fit$data, generate_panel_data(seed = 42), ignore_attr = TRUE)
   
   # remove original data
   rm("temp_test_df", envir = .GlobalEnv)
@@ -286,6 +294,13 @@ test_that(
   ), {
     suppressMessages(expect_message(
       fit <- ferols(y ~ x + z | i + t, vcov = ~i, data = test_df_missing)
+    ))
+    suppressMessages(expect_no_message(
+      fit <- ferols(
+        y ~ x + z | i + t, vcov = ~i, data = test_df_missing, 
+        scale_est = "lad_mm_ms"
+      ),
+      message = ".*collinearity.*"
     ))
     expect_no_message(
       fit <- ferols(

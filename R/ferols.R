@@ -112,48 +112,98 @@ lad_rq <- function(fml, data, adj_rlm = FALSE) {
 # https://doi.org/10.1016/j.jeconom.2019.04.009
 # Mirrors the approach of Ben Jann in his Stata moremeta code
 # https://github.com/benjann/moremata/blob/master/source/mm_aqreg.mata
+# 
+# We should possibly drop this at some point as it is somewhat hacky when
+# identifying the fe to absorb from the fixest FE syntax and not really
+# needed anyhow given that Rios-Avila, Siles, and Canavire-Bacarreza (2024)
+# works.
 # ------------------------------------------------------------------------------
 
 lad_mm_ms <- function(
   fml, data, adj_rlm = FALSE, fixef.rm = "perfect_fit", 
   warn = TRUE, notes = TRUE
 ) {
+  # Obtain fixed effect structure from fixest
+  obj_fixest <- fixest::feols(fml, data, warn = F, notes = F)
+  if (length(obj_fixest$fixef_vars)) { 
+    df_fe <- stats::model.matrix(obj_fixest, type = "fixef", sample = "original")
+    names(df_fe) <- make.names(names(df_fe))
+    fixef_values <- fixest::fixef(obj_fixest, notes = FALSE)
+    ref_fe <- lapply(fixef_values, function(x) unname(which(x == 0)))
+    names(ref_fe) <- make.names(names(ref_fe))
+    for (fe in names(df_fe)) {
+      ref_fe[[fe]] <- levels(factor(df_fe[,fe]))[ref_fe[[fe]]]
+    }
+  } else {
+    df_fe <- NULL
+  }
+  
   fml_split <- fixest:::fml_split(fml, raw = TRUE)
-  if (length(fml_split) == 2) {
-    fe_vars <- all.vars(fml_split[[2]])
-    n_levels <- vapply(fe_vars, function(v) nlevels(factor(data[,v])), integer(1))
+  if (! is.null(df_fe)) {
+    fe_vars <- names(df_fe)
+    n_levels <- vapply(fe_vars, function(v) nlevels(factor(df_fe[,v])), integer(1))
     idx_abs <- which.max(n_levels)
     main_fml <- fml_split[[1]]
     fe_fml <- fml_split[[2]]
+    data_fe <- cbind(
+      data, df_fe[, fe_vars[which(! fe_vars %in% names(data))], drop = FALSE]
+    )
     dummy_fes <- fe_vars[-idx_abs]
     if (length(dummy_fes) > 0) {
-      add_terms <- paste0("i(", dummy_fes, ")", collapse = " + ")
+      dummy_fes_str <- character()
+      for (dummy_fe in dummy_fes) {
+        dummy_fes_str <- c(
+          dummy_fes_str,
+          if (length(ref_fe[dummy_fe])) {
+            paste0(
+              "i(", dummy_fe, ", ref = ", 
+              paste(
+                utils::capture.output(dput(ref_fe[[dummy_fe]])), collapse = " "
+              ),
+              ")"
+            )
+          } else {
+            paste0("i(", dummy_fe, ")")
+          }
+        )
+      }
+      add_terms <- paste0(dummy_fes_str, collapse = " + ")
       main_fml <- stats::update.formula(main_fml, paste(". ~ . +", add_terms))
     }
     absorb_fe <- fe_vars[idx_abs]
     fe_fml <- stats::as.formula(paste("~", absorb_fe))
     fml_loc <- stats::as.formula(
-      paste(deparse(main_fml), "|", deparse(fe_fml[[2]]))
+      paste(
+        paste(deparse(main_fml), collapse = " "), "|", 
+        paste(deparse(fe_fml[[2]]), collapse = " ")
+      )
     )
-  } else {fml_loc <- fml} 
+  } else {
+    fml_loc <- fml
+    data_fe <- data
+  } 
   
   # --- Estimate location ------------------------------------------------------
   # User receives the side effect messages of the first stage by default
+  # but collinearity messages are being purged as they will normally be an 
+  # artefact of the explicit fe estimation (if they are not then the 
+  # IRLS notes will catch them later)
+  
   fit_loc <- fixest::feols(
-    fml_loc, data, fixef.rm = fixef.rm, warn = warn, notes = notes
+    fml_loc, data_fe, fixef.rm = fixef.rm, warn = warn, notes = notes
   )
   yhat_loc <- as.numeric(stats::fitted(fit_loc, na.rm = FALSE))
   y <- as.numeric(data[, as.character(fml[[2]]), drop = TRUE])
   e <- y - yhat_loc
   Ipos <- as.numeric(e >= 0)
   Ibar <- mean(Ipos, na.rm = TRUE)
-  data$r_raw <-  2 * e * (Ipos - Ibar)
+  data_fe$r_raw <-  2 * e * (Ipos - Ibar)
 
   # --- Estimate scale ---------------------------------------------------------
   fml_scl <- fml_loc
   fml_scl[[2]] <- substitute(r_raw)
   fit_scl <- fixest::feols(
-    fml_scl, data, fixef.rm = fixef.rm,warn = FALSE, notes = FALSE
+    fml_scl, data_fe, fixef.rm = fixef.rm,warn = FALSE, notes = FALSE
   )
   denom <- as.numeric(stats::fitted(fit_scl, na.rm = FALSE))
   
@@ -166,7 +216,8 @@ lad_mm_ms <- function(
   if (adj_rlm) {
     s <- median(abs(resid_tau))/0.6745
   } else {
-    df_initial <- fixest::degrees_freedom(fit_loc, type = "resid") 
+    # Use dof from original fixest object to avoid droping nested FEs
+    df_initial <- fixest::degrees_freedom(obj_fixest, type = "resid") 
     n <- fit_loc$nobs
     pprob <- (2 * n - df_initial) / (2 * n)
     s <- as.numeric(
@@ -188,7 +239,7 @@ lad_mm_ms <- function(
 
 # ------------------------------------------------------------------------------
 # Following methods of moment approach as in 
-# Rios-Avila, Siles, and Canavire-Bacarreza  (2024)
+# Rios-Avila, Siles, and Canavire-Bacarreza (2024)
 # https://docs.iza.org/dp17262.pdf)
 # to absorb multiple fixed effects. Generates scale, beta, and residual
 # estimates that are identical within to numerical precision to the ones
@@ -273,18 +324,22 @@ lad_mm_rsc <- function(
 #'    - `"lad_rq"`: Uses absolute residuals from a normal median/LAD regression 
 #'       (calling `quantreg::rq()`) to estimate the scale. Can only be used when
 #'       no fixed effects are present.   
-#'    - `"lad_mm_ms"`: Uses an method of moments algorithm for the median 
-#'      quantile regression introduced by Machado and Santos Silva 
+#'    - `"lad_mm_ms"`: Uses the original method of moments algorithm for the 
+#'      median quantile regression introduced by Machado and Santos Silva 
 #'      (2019, https://doi.org/10.1016/j.jeconom.2019.04.009). 
-#'      This should yield similar scale and beta estimates as the approaches of 
-#'      the Stata packages `robreg` (https://github.com/benjann/robreg) and 
-#'      `robhdfe` (https://github.com/dveenman/robhdfe). 
+#'      This approach allows for the absorption of one dimension of fixed 
+#'      effects. As the 'lad_mm_rsc' approach below is faster while providing 
+#'      identical estimates, this algorithm is included here mostly for 
+#'      comparison checks.     
 #'    - `"lad_mm_rsc"`: Method of moments algorithm as extended by
 #'      Rios-Avila, Siles, and Canavire-Bacarreza 
-#'      (2024, https://docs.iza.org/dp17262.pdf). This algorithm is
-#'      faster as it absorbs multi-dimensional fixed effects. Its scale and beta
-#'      estimates should be virtually identical (within numerical precision) to 
-#'      the ones generated by `"lad_mm_ms"`.
+#'      (2024, https://docs.iza.org/dp17262.pdf). This absorbs multi-dimensional 
+#'      fixed effects. Its scale and beta estimates should be virtually 
+#'      identical (within numerical precision) to the ones generated by 
+#'      `"lad_mm_ms"` and the ones of the Stata packages `robreg` 
+#'      (https://github.com/benjann/robreg) and 
+#'      `robhdfe` (https://github.com/dveenman/robhdfe). 
+
 #' @param scale A positive numerical value to override the estimated scale.
 #' @param scale_update Should the scale estimate be updated in every IRLS step?
 #'  Defaults to `FALSE` like Stata's `robreg`. Set to `TRUE` to get closer to
@@ -630,10 +685,8 @@ vcov.ferols <- function(
   vcov <- fixest:::oldargs_to_vcov(se, cluster, vcov) 
   if (is.null(vcov)) vcov <- "hetero"
 
-  mf <- fixest::fixest_data(object, sample = "estimation")
-  
-  fe_df <- if (length(object$fixef_vars)) {
-    mf[, object$fixef_vars, drop = FALSE] 
+  fe_df <- if (length(object$fixef_vars)) { 
+    stats::model.matrix(object, type = "fixef")
   } else NULL
   
   X  <- stats::model.matrix(object, type = "rhs")
