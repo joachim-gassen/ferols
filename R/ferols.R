@@ -644,7 +644,7 @@ vcov.ferols <- function(
   psi <- huber_psi(z, k) 
   phi <- huber_phi(z, k)
   
-  if (vcov == "iid") {
+  if (is.character(vcov) && length(vcov) == 1 && vcov == "iid") {
     # We are on our own. Calculating MASS::rlm() model-type standard errors
     Xr <- if (!is.null(fe_df)) {
       fixest::demean(X, f = fe_df, na.rm = TRUE) 

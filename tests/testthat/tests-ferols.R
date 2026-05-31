@@ -5,6 +5,12 @@ test_df <- generate_panel_data(seed = 42)
 assign("test_df", test_df, envir = .GlobalEnv)
 on.exit(rm("test_df", envir = .GlobalEnv), add = TRUE)
 
+test_df_conley <- test_df
+test_df_conley$lat <- rep(runif(1000, -40, 40), each = 10)
+test_df_conley$long <- rep(runif(1000, -80, 80), each = 10)
+assign("test_df_conley", test_df_conley, envir = .GlobalEnv)
+on.exit(rm("test_df_conley", envir = .GlobalEnv), add = TRUE)
+
 test_df_missing <- generate_panel_data(seed = 42, share_missing = 0.3)
 assign("test_df_missing", test_df_missing, envir = .GlobalEnv)
 on.exit(rm("test_df_missing", envir = .GlobalEnv), add = TRUE)
@@ -92,6 +98,13 @@ test_that("various SE types are supported", {
   )
   expect_no_warning(se3 <- summary(f3)$se)
   expect_true(grepl("Custom", attr(se3, "vcov_type"), fixed = T))
+  
+  expect_no_warning(
+    f4 <- ferols(y ~ x | i + t, data = test_df_conley, vcov = conley(500))
+  )
+  expect_no_warning(se4 <- summary(f4)$se)
+  expect_true(grepl("Conley (500km)", attr(se4, "vcov_type"), fixed = T))
+  
 })
 
 test_that("unsupported features error cleanly", {
